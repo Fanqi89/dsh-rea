@@ -1,0 +1,48 @@
+# dsh-rea — REA (Reverse Engineer Anything) MCP bridge for DeepSeek Harness.
+# https://github.com/morluto/rea
+#
+# Configuration-only bundle: it inserts the already-shipped
+# @deepseek-ai/dsh-mcp-client with REA's local stdio server
+# (npm package `rea-agents`, launched through the package runner), and the
+# server's tools register on the model as mcp__rea__<tool_name>.
+#
+# Two rows pick the stdio launcher for the host platform; only one mounts
+# (both use serverName `rea`, so they can never collide at runtime):
+#   - Windows: cmd.exe /d /c npx … (Node cannot spawn the npx.cmd shim directly)
+#   - POSIX  : npx …
+#
+# Knobs:
+# - env REA_MCP_INPUT_SCHEMA_PROFILE=compact advertises smaller input schemas
+#   (far fewer tokens per request). Remove the env block for the full profile.
+# - toolCallTimeoutMs bounds one tools/call; native providers (Ghidra/Hopper)
+#   can spend minutes on their first query, so the default 60 s is raised here.
+# - failOnStartupError stays false so the Harness boots even when the REA
+#   server cannot start (missing Node/network); the tools then simply stay
+#   absent until the connection succeeds.
+- insert:
+    - id: rea-mcp
+      name: '@deepseek-ai/dsh-mcp-client'
+      disabled: !!js "process.platform !== 'win32'"
+      config:
+        serverName: rea
+        transport: stdio
+        command: cmd.exe
+        args: ['/d', '/c', 'npx', '-y', 'rea-agents@6.4.0', 'mcp']
+        env:
+          REA_MCP_INPUT_SCHEMA_PROFILE: compact
+        toolCallTimeoutMs: 1200000
+        maxInstructionBytes: 131072
+        failOnStartupError: false
+    - id: rea-mcp-posix
+      name: '@deepseek-ai/dsh-mcp-client'
+      disabled: !!js "process.platform === 'win32'"
+      config:
+        serverName: rea
+        transport: stdio
+        command: npx
+        args: ['-y', 'rea-agents@6.4.0', 'mcp']
+        env:
+          REA_MCP_INPUT_SCHEMA_PROFILE: compact
+        toolCallTimeoutMs: 1200000
+        maxInstructionBytes: 131072
+        failOnStartupError: false
