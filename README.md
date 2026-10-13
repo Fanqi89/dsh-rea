@@ -5,13 +5,13 @@
 一个 **configuration-only bundle**：不写一行插件代码，通过 DeepSeek Harness 自带的
 `@deepseek-ai/dsh-mcp-client` 把本地 REA 的 stdio MCP 服务器接入 Harness。
 接入后 REA 的全部工具（`open_binary`、`analyze_javascript_application`、
-`inspect_managed_artifact`、反编译 / 伪代码 / 字符串 / 引用追踪等 170 个，6.4.0 实测）会以
+`inspect_managed_artifact`、反编译 / 伪代码 / 字符串 / 引用追踪等，rea-agents 6.4.0 实测 **170 个**）会以
 
 ```text
 mcp__rea__<tool_name>
 ```
 
-的形式注册给模型（rea-agents 6.4.0 实测 **170 个**），配合已安装的 `reverse-engineer-anything` 技能即可开展逆向调查。
+的形式注册给模型，配合已安装的 `reverse-engineer-anything` 技能即可开展逆向调查。
 
 > **合规提示**：REA 仅用于你拥有或已获授权分析的软件（研究、教育、互操作性、软件保存）。
 > 使用前请阅读上游 [DISCLAIMER.md](https://github.com/morluto/rea/blob/main/DISCLAIMER.md)。
@@ -31,18 +31,19 @@ dsh-rea/
 
 | 项目 | 要求 |
 |---|---|
-| Node.js | 22.x (≥22.19)、24.x (≥24.11) 或 26+，且 `npx` 可用（REA 官方要求） |
+| DeepSeek Harness | 需自带 `@deepseek-ai/dsh-mcp-client` 的版本（0.2.0-rc.2 实测通过） |
+| Node.js | 22.x (≥22.19)、24.x (≥24.11) 或 26+，且 `npx` 可用（REA 官方要求）；缺 Node 时 Harness 照常启动，但不会出现 `mcp__rea__*` 工具 |
 | 网络 | 首次启动经 `npx -y rea-agents@6.4.0` 拉取 npm 包（之后走 npx 缓存） |
 | 深度原生分析 | 需要本机已有的 Hopper / Ghidra / IDA 之一（Ghidra 需设置 `GHIDRA_INSTALL_DIR`） |
 | 静态 JS / .NET 分析 | 无需任何反汇编引擎 |
-| 调查工作流技能 | `npx skills add morluto/rea --skill reverse-engineer-anything`（本机已装可跳过） |
+| 调查工作流技能 | `npx skills add morluto/rea --skill reverse-engineer-anything`，或 `npx -y rea-agents@6.4.0 setup --skill --yes`（装与包版本一致的技能） |
 
 ## 安装
 
-方式零（从 GitHub 直接装，要求本仓库文件位于仓库根目录）：
+方式零（从 GitHub 直接装，推荐给其他人）：
 
 ```powershell
-dsh plugin --profile "$env:DSH_PROFILE" add github:<你的GitHub用户名>/dsh-rea
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea
 ```
 
 方式一（推荐，UI）：**设置 → 插件 → 安装 bundle**，选择本目录的绝对路径。
@@ -68,7 +69,12 @@ REA 服务器首次冷启动要跑 npx 下载，若几秒内没出工具属正�
   （`rea-mcp` 挂载、`rea-mcp-posix` 按平台禁用，`!!js` 平台判断生效）；
 - `cordis_inspect_query Tool.listTools` 确认 **170 个 `mcp__rea__*` 工具**已注册在线；
 - stdio 握手实测：`cmd.exe /d /c npx -y rea-agents@6.4.0 mcp` →
-  `initialize` 返回 `rea@6.4.0`，`tools/list` 返回 170 个工具。
+  `initialize` 返回 `rea@6.4.0`，`tools/list` 返回 170 个工具；
+- GitHub 源码安装路径实测：`pnpm add github:Fanqi89/dsh-rea` → 装出 `dsh-rea@1.0.0`，
+  包内含 `package.json` / `cordis.patch.yml` / `locale/*`（即本仓库根目录布局可直接 `github:` 安装）。
+
+> 已知边界：Windows 路径已完整验证；macOS / Linux 走的是补丁里的 POSIX 行（`npx` 直启），
+> 逻辑同构但未在真实机器上端到端验证过。
 
 ## 配置项（`cordis.patch.yml`）
 
