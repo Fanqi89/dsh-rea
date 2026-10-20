@@ -21,7 +21,7 @@ mcp__rea__<tool_name>
 ```text
 dsh-rea/
 ├── package.json        # bundle 清单：dsh.bundle.patch 指向下面的补丁
-├── cordis.patch.yml    # 插入 dsh-mcp-client 行（Windows / POSIX 各一行，按平台启用）
+├── cordis.patch.yml    # 插入 dsh-mcp-client 行（单行；平台在 Node 启动器里选择）
 ├── locale/en.json      # 插件卡片标题与描述
 ├── locale/zh.json
 └── README.md
@@ -63,24 +63,35 @@ dsh plugin --profile "$env:DSH_PROFILE" add "X:\path\to\dsh-rea"
 `mcp__rea__binary_session`（输入 `{}`）查看 `result.tool_availability`。
 REA 服务器首次冷启动要跑 npx 下载，若几秒内没出工具属正常，稍等重试。
 
-本机实测（2026-10-12，DSH 0.2.0-rc.2 + rea-agents 6.4.0 + Windows）：
+本机实测（2026-10-12/13，DSH 0.2.0-rc.2 + rea-agents 6.4.0 + Windows）：
 
-- `plugin_manager install_bundle` → `application: applied`，profile 条目 195 → 197
-  （`rea-mcp` 挂载、`rea-mcp-posix` 按平台禁用，`!!js` 平台判断生效）；
+- `plugin_manager install_bundle` → `application: applied`；
 - `cordis_inspect_query Tool.listTools` 确认 **170 个 `mcp__rea__*` 工具**已注册在线；
-- stdio 握手实测：`cmd.exe /d /c npx -y rea-agents@6.4.0 mcp` →
+- stdio 握手实测：启动器拉起的 `rea mcp` →
   `initialize` 返回 `rea@6.4.0`，`tools/list` 返回 170 个工具；
-- GitHub 源码安装路径实测：`pnpm add github:Fanqi89/dsh-rea` → 装出 `dsh-rea@1.0.0`，
+- 补丁合入验证：`dsh --profile <临时 profile> --patch ./cordis.patch.yml --dump-config`
+  能看到 `rea-mcp` 行（`command: node` + `args: ['-e', …]`）正确合成；
+- GitHub 源码安装路径实测：`pnpm add github:Fanqi89/dsh-rea` → 装出 `dsh-rea@1.0.1`，
   包内含 `package.json` / `cordis.patch.yml` / `locale/*`（即本仓库根目录布局可直接 `github:` 安装）。
 
-> 已知边界：Windows 路径已完整验证；macOS / Linux 走的是补丁里的 POSIX 行（`npx` 直启），
-> 逻辑同构但未在真实机器上端到端验证过。
+> 已知边界：Windows 路径已端到端验证；macOS / Linux 走同一启动器里的 POSIX 分支
+> （`npx` 直启），逻辑同构但未在真实机器上端到端验证过。
 
 ## 配置项（`cordis.patch.yml`）
 
-两行插入（`rea-mcp` 用于 Windows，`rea-mcp-posix` 用于 POSIX）由 `disabled: !!js`
-按 `process.platform` 挑选，**只有其中一行会挂载**，两行的 `serverName` 同为 `rea`，
-因此不会冲突。可调字段：
+**只插入一个 `dsh-mcp-client` 行**（`id: rea-mcp`，`serverName: rea`），`command: node`
+`args: ['-e', <启动器>]`。启动器是一行 ~600 字节的 Node 脚本，在进程内判断
+`process.platform`：Windows 用 `cmd.exe /d /c npx … mcp`，POSIX 用 `npx … mcp`，
+`stdio: 'inherit'` 让 MCP 字节流直通，并在 Harness 关闭时用 `taskkill /T`（Windows）
+或进程组 `SIGTERM`（POSIX）清理整棵子进程树。
+
+> **为什么不是"两行 + `disabled: !!js`"？** v1.0.0 曾用两行（Windows / POSIX 各一条，
+> 由 `disabled: !!js process.platform …` 挑选）。部分较旧的 Harness 构建会忽略或误解析
+> `disabled` 里的 `!!js`，于是第二条同 `serverName` 的行真的会尝试激活、撞上
+> "duplicate server name" 规则，在插件面板里显示成 **「共 2 个组件 · 1 运行中 · 1 异常」**。
+> v1.0.1 起改成单行 + 启动器，不再依赖 `!!js`、也不会再有重复注册。
+
+可调字段：
 
 | 字段 | 当前值 | 说明 |
 |---|---|---|
@@ -88,10 +99,24 @@ REA 服务器首次冷启动要跑 npx 下载，若几秒内没出工具属正�
 | `toolCallTimeoutMs` | `1200000`（20 分钟） | 单次 `tools/call` 上限。Ghidra 首查默认 330 s 启动预算，故高于默认 60 s |
 | `maxInstructionBytes` | `131072` | 服务器 instructions 上限，超限会拒绝连接 |
 | `failOnStartupError` | `false` | `false`：REA 起不来时 Harness 照常启动、只是没有 REA 工具；`true`：激活失败会报错（便于排查） |
-| `args` 中的 `rea-agents@6.4.0` | 版本钉扎 | 上游迭代快，升级时改版本号重装即可 |
+| `args` 中的 `rea-agents@6.4.0` | 版本钉扎 | 上游迭代快，升级时改版本号重装即可（启动器脚本里也有同一处版本号，需一起改） |
 
-修改补丁后重装 bundle（或重启）生效；**不要**为同一服务器复制第二个条目
+修改补丁后需要重启 Harness 生效；**不要**为同一服务器再复制第二个条目
 （同 `serverName` 的第二条会加载失败）。
+
+## 升级 / 版本历史
+
+- **v1.0.1**（当前）：单行 + Node 启动器；修复旧构建下第二条平台行显示「异常」的问题。
+- **v1.0.0**：双行 + `disabled: !!js`（在较旧 Harness 上可能出现 1 运行中 / 1 异常）。
+
+从 v1.0.0 升级：`install_bundle` 对**同一路径/同一 spec** 重复安装会返回
+`ambiguous-install`（它靠"安装前后依赖差异"识别装了什么，同 spec 重装没有差异）。
+因此升级按"先卸载再装"走：
+
+1. 在**设置 → 插件**里卸载 `dsh-rea`（或让 Agent 调 `plugin_manager` 的 `remove_bundle`）；
+2. 再装新版本：`dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.0.1`，
+   或 UI 里「安装 bundle」选新目录；
+3. **重启 Harness** —— 补丁只在启动时合入，不重启仍是旧配置。
 
 ## 卸载 / 临时禁用
 
@@ -105,9 +130,12 @@ REA 服务器首次冷启动要跑 npx 下载，若几秒内没出工具属正�
 ```text
 Harness 启动
   └─ loader 应用 bundle 补丁 cordis.patch.yml
-       └─ 插入 @deepseek-ai/dsh-mcp-client 行（stdio: cmd.exe /d /c npx -y rea-agents@6.4.0 mcp）
-            └─ MCP 握手 + tools/list（6.4.0 实测 170 个工具）
-                 └─ 注册为 ctx.tools：mcp__rea__open_binary、mcp__rea__analyze_function、…
+       └─ 插入 @deepseek-ai/dsh-mcp-client 行
+            └─ command: node  args: ['-e', <平台启动器>]
+                 ├─ Windows: cmd.exe /d /c npx -y rea-agents@6.4.0 mcp
+                 └─ POSIX  : npx -y rea-agents@6.4.0 mcp
+                      └─ MCP 握手 + tools/list（6.4.0 实测 170 个工具）
+                           └─ 注册为 ctx.tools：mcp__rea__open_binary、mcp__rea__analyze_function、…
 ```
 
 选型依据来自 Harness 官方 `cordis-plugin-development` 技能的
@@ -118,12 +146,17 @@ DeepSeek Harness 的官方接入说明（`rea setup --client dsh` 写入的正�
 ## 故障排查
 
 1. **没有 `mcp__rea__*` 工具**：先看 Harness 日志里 dsh-mcp-client 的连接报错；
-   手动跑 `cmd.exe /d /c npx -y rea-agents@6.4.0 mcp` 确认 Node/npx 正常。
-2. **首启超时**：预热缓存 `npx -y rea-agents@6.4.0 --help`，或把 `failOnStartupError` 设为 `true` 让错误显性化。
-3. **原生分析报 provider 缺失**：静态 JS/.NET 不需要引擎；原生需 Hopper/Ghidra/IDA，
+   手动跑 `npx -y rea-agents@6.4.0 mcp` 确认 Node/npx 正常（Windows 可试
+   `cmd.exe /d /c npx -y rea-agents@6.4.0 mcp`）。
+2. **插件面板显示「共 2 个组件 · 1 运行中 · 1 异常」**：这是 v1.0.0 的双行补丁在部分
+   Harness 构建上的残留（`disabled: !!js` 没被正确识别 → 第二条同 `serverName` 的行
+   激活失败）。升级到 v1.0.1（单行 + 启动器）并**重启**即可；升级方式见上面「升级 / 版本历史」。
+3. **首启超时**：预热缓存 `npx -y rea-agents@6.4.0 --help`，或把 `failOnStartupError` 设为 `true` 让错误显性化。
+4. **原生分析报 provider 缺失**：静态 JS/.NET 不需要引擎；原生需 Hopper/Ghidra/IDA，
    用 `npx -y rea-agents@6.4.0 doctor --json` 诊断（`rea doctor` 同理）。
-4. **token 消耗过高**：确认 `env.REA_MCP_INPUT_SCHEMA_PROFILE: compact` 在配置里；
+5. **token 消耗过高**：确认 `env.REA_MCP_INPUT_SCHEMA_PROFILE: compact` 在配置里；
    仍嫌大就仅在逆向会话启用本插件。
+6. **重装同一路径报 `ambiguous-install`**：属于预期——先卸载再安装（见上）。
 
 ## License
 

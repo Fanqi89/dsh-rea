@@ -6,10 +6,14 @@
 # (npm package `rea-agents`, launched through the package runner), and the
 # server's tools register on the model as mcp__rea__<tool_name>.
 #
-# Two rows pick the stdio launcher for the host platform; only one mounts
-# (both use serverName `rea`, so they can never collide at runtime):
+# ONE row, platform chosen inside a tiny Node launcher:
 #   - Windows: cmd.exe /d /c npx … (Node cannot spawn the npx.cmd shim directly)
 #   - POSIX  : npx …
+# Why one row instead of two rows with `disabled: !!js`? Older Harness builds
+# can ignore or mis-parse a `!!js` expression in `disabled`; the second row
+# then activates, hits the duplicate-serverName rule and shows up as a failed
+# component ("异常"). A single row with literal strings works on every Harness
+# that can spawn a stdio MCP server, and it keeps exactly one `rea` server.
 #
 # Knobs:
 # - env REA_MCP_INPUT_SCHEMA_PROFILE=compact advertises smaller input schemas
@@ -22,25 +26,14 @@
 - insert:
     - id: rea-mcp
       name: '@deepseek-ai/dsh-mcp-client'
-      disabled: !!js "process.platform !== 'win32'"
       config:
         serverName: rea
         transport: stdio
-        command: cmd.exe
-        args: ['/d', '/c', 'npx', '-y', 'rea-agents@6.4.0', 'mcp']
-        env:
-          REA_MCP_INPUT_SCHEMA_PROFILE: compact
-        toolCallTimeoutMs: 1200000
-        maxInstructionBytes: 131072
-        failOnStartupError: false
-    - id: rea-mcp-posix
-      name: '@deepseek-ai/dsh-mcp-client'
-      disabled: !!js "process.platform === 'win32'"
-      config:
-        serverName: rea
-        transport: stdio
-        command: npx
-        args: ['-y', 'rea-agents@6.4.0', 'mcp']
+        command: node
+        args:
+          - '-e'
+          - >-
+            const{spawn}=require('node:child_process');const win=process.platform==='win32';const cmd=win?'cmd.exe':'npx';const a=win?['/d','/c','npx','-y','rea-agents@6.4.0','mcp']:['-y','rea-agents@6.4.0','mcp'];const c=spawn(cmd,a,{stdio:'inherit',windowsHide:true,detached:!win});let done=false;const stop=()=>{if(done)return;done=true;try{if(win){spawn('taskkill',['/pid',String(c.pid),'/T','/F'],{stdio:'ignore',windowsHide:true});}else{process.kill(-c.pid,'SIGTERM');}}catch{}};for(const s of ['SIGTERM','SIGINT','SIGHUP'])process.on(s,stop);c.on('exit',(code,sig)=>{done=true;process.exit(code===null?(sig?1:0):code);});
         env:
           REA_MCP_INPUT_SCHEMA_PROFILE: compact
         toolCallTimeoutMs: 1200000

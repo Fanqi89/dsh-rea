@@ -1,6 +1,6 @@
 {
   "name": "dsh-rea",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "REA (Reverse Engineer Anything) MCP bridge for DeepSeek Harness — reverse engineer native binaries, JS/Electron apps, .NET assemblies, APKs, firmware and websites through mcp__rea__* tools.",
