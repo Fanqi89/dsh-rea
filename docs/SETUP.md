@@ -120,6 +120,33 @@ Add-Type -TypeDefinition $cs -Language CSharp -OutputAssembly C:\tools\apktool\a
 - JADX/apktool/adb 同理，用 `export REA_JADX_MCP_JAR=…`、`REA_APKTOOL_COMMAND=…`、`REA_ADB_PATH=…`。
 - Linux 额外可用：`inspect_binary_layout`（pwntools）、core 分析、binwalk/unblob 固件、mitmproxy 抓包、进程捕获。
 
+### 2.7 Windows 上的 Linux 专属线（WSL 2）
+
+REA 对 Linux 门禁的能力（ELF 布局、崩溃 core、固件、原生 mitmproxy 抓包、PTY 进程捕获、
+`import-reference-source`）在 `win32` 进程里会返回 `unsupported_host`；`.deb` / Linux 应用也只能在
+Linux 主机上直接打开。做法是准备一个 **Linux REA 实例**（第二个 MCP server，`serverName: rea-linux`）：
+
+```powershell
+# 一次：启用 WSL 功能 + 装内核 + 导入 Ubuntu 24.04 + 装工具链
+#      首次启用 WSL 会要求重启；重启后再跑一次完成导入与安装
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-wsl-linux-toolchain.ps1
+
+# 之后：把 cordis.patch.yml 里 rea-linux 的 disabled: true 改成 false，重启 Harness
+```
+
+WSL 内由 `scripts/linux-tools-setup.sh` 安装：`python3-pip`、`pipx` 管理的 **pwntools / binwalk /
+unblob / mitmproxy**，以及 `binutils file gdb xz-utils p7zip-full dpkg-dev`、**Node.js 22** 和
+`rea-agents 6.4.0`。发行版默认导入到 `C:\wsl\Ubuntu-24.04`，可用 `-Distribution` / `-InstallPath` 改。
+
+只用 `.deb` 拆包、不装 WSL 时，Windows 侧可用 7-Zip 独立版：
+
+```powershell
+& "C:\tools\7zip\7zr.exe" x .\pkg.deb          # ar 包 → control.tar.* / data.tar.*
+& "C:\tools\7zip\7zr.exe" x .\data.tar.xz      # → ELF、资源、目录树
+```
+
+> ELF 的反编译本身仍走 Linux 实例（`mcp__rea-linux__open_binary` + `analyze_function`）。
+
 ## 3. 技能
 
 ```bash

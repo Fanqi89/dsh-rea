@@ -9,6 +9,43 @@ dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.1.0
 
 ---
 
+## v1.3.0 — 2026-10-21
+
+**主题：补齐 Linux 专属分析线（WSL 2 + Linux 工具链 + 可选 Linux REA 实例）。**
+
+REA 有一部分能力被平台门禁到 Linux（Windows 上调用会返回 `unsupported_host`）：
+ELF 布局（pwntools）、崩溃 core、固件（binwalk / unblob）、原生 mitmproxy 抓包，以及
+`.deb` / Linux 应用程序这类只能在 Linux 主机上打开的目标。这一版把这条线做成「一条命令准备 + 按需启用」。
+
+### 新增
+
+- **`scripts/setup-wsl-linux-toolchain.ps1`**（Windows 侧）：
+  启用 WSL 可选功能 → 装 WSL2 内核 → 用 Ubuntu 24.04 base rootfs `wsl --import`
+  （默认 `C:\wsl\Ubuntu-24.04`）→ 在发行版内运行工具链脚本。支持 `-DryRun`、
+  `-Distribution`、`-InstallPath`、`-SkipFeatureCheck`。首次启用 WSL 需重启一次，脚本会提示再跑一次。
+- **`scripts/linux-tools-setup.sh`**（WSL 内）：
+  apt 基础包（`binutils file gdb xz-utils p7zip-full dpkg-dev` 等）+ Node.js 22（NodeSource）+
+  pipx 安装 `pwntools`、`binwalk`、`unblob`、`mitmproxy`，并把版本记录到 `/root/rea-linux-tools.txt`。
+- **`cordis.patch.yml` 新增被禁用的第二行 `rea-linux`**：
+  `command: wsl.exe args: ['-d','Ubuntu-24.04','-u','root','--','npx','-y','rea-agents@6.4.0','mcp']`，
+  `serverName: rea-linux`。默认 `disabled: true`（**字面量**，不涉及 `!!js`），准备好 WSL 后改成
+  `false` 并重启，即可得到 `mcp__rea-linux__*`（约 170 个工具，token 成本翻倍，按需开）。
+- **Windows 侧 `.deb` 拆包**：仓库文档记录用 7-Zip 独立版 `7zr.exe`（`C:\tools\7zip\7zr.exe`）
+  解 `ar` 包：`7zr x pkg.deb` → `7zr x data.tar.xz` → 得到 ELF/资源；进一步的 ELF 反编译走 WSL 里的 REA。
+
+### 变更
+
+- `docs/CAPABILITIES.md` / `docs/SETUP.md` 增加“Linux 专属线（WSL）”章节。
+- README 增加 Linux 路线说明与 v1.3.0 版本记录；`dsh.plugin.json` 版本同步。
+
+### 状态
+
+- 工具安装脚本已在本机写好并通过 `-DryRun` 与 PowerShell 5.1 语法校验；
+- WSL 可选功能已启用（`Microsoft-Windows-Subsystem-Linux` / `VirtualMachinePlatform` 均为 Enabled），
+  **需要重启一次**后 `wsl --import` 与工具链安装才能完成；用户要求“只完成工具、不测试”，故未跑功能验证。
+
+---
+
 ## v1.2.0 — 2026-10-21
 
 **主题：按 DeepSeek Harness 的插件规范做完整适配（兼容性声明 + 注册表清单 + 卡片图标）。**

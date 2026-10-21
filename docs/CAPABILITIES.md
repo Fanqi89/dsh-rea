@@ -41,6 +41,31 @@
 
 **任意平台都不可用的平台专属项**：跨平台互斥的那些工具会返回结构化 `unsupported_host`，不会静默失败。
 
+### 3.1 Linux 专属线（Windows 上通过 WSL 补齐）
+
+REA 在 Windows 进程里检测到 `win32` 就会拒绝 Linux 门禁能力，所以这条线要跑一个**Linux 实例**：
+
+```powershell
+# 1) 准备 WSL 2 + 发行版 + 工具链（首次需重启一次，重启后再跑一次）
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-wsl-linux-toolchain.ps1
+
+# 2) 把 cordis.patch.yml 里 rea-linux 那行的 disabled: true 改成 false，重启 Harness
+```
+
+| 能力 | Linux 侧依赖 | 启用后工具名 |
+|---|---|---|
+| ELF 布局 / 符号 / 重定位 / 静态缓解 | pwntools | `mcp__rea-linux__inspect_binary_layout` |
+| 崩溃 core（寄存器/信号/映射候选） | pwntools（可选 gdb/pwndbg） | `mcp__rea-linux__inspect_recorded_crash` |
+| 固件区域识别 / 解包 | binwalk / unblob | `mcp__rea-linux__inspect_firmware_regions`、`extract_firmware` |
+| 原生 mitmproxy 抓包 | mitmproxy（mitmdump） | `mcp__rea-linux__inspect_web_network_capture` |
+| 历史源码导入（对比构建） | 无额外依赖 | `mcp__rea-linux__import_reference_source` |
+| 进程行为捕获（PTY 回放） | 无额外依赖 | `mcp__rea-linux__capture_process_scenario` |
+| `.deb` / Linux 应用目标 | 无（REA 在 Linux 主机上直接读） | `mcp__rea-linux__open_binary` + 通用分析 |
+
+> Windows 侧也能先做一步：用 7-Zip 独立版拆 `.deb`（`ar` 包）——
+> `C:\tools\7zip\7zr.exe x pkg.deb` 得到 `data.tar.xz`，再 `7zr x data.tar.xz` 得到 ELF 与资源；
+> ELF 的反编译仍需 Linux 实例（或 Ghidra GUI 手动加载）。
+
 ## 4. REA 上游本身不支持（与平台无关）
 
 - MCP 协议：prompt 模板、资源订阅、task-based 执行扩展（相关调用会被拒绝）

@@ -23,6 +23,16 @@
 # - failOnStartupError stays false so the Harness boots even when the REA
 #   server cannot start (missing Node/network); the tools then simply stay
 #   absent until the connection succeeds.
+#
+# Second, DISABLED row: a Linux REA instance for the families REA gates to
+# Linux (ELF layout via pwntools, firmware via binwalk/unblob, native
+# mitmproxy captures, crash cores) and for .deb / Linux application targets
+# opened from a Linux host. Prepare that host first with
+#   powershell -File .\scripts\setup-wsl-linux-toolchain.ps1
+# then flip `disabled: true` to `false` here (or in your profile patch) and
+# restart the Harness. Enabling adds another ~170 tools (token cost). A plain
+# literal `true` is used on purpose: no `!!js` expression is involved, so no
+# Harness build can mis-parse it.
 - insert:
     - id: rea-mcp
       name: '@deepseek-ai/dsh-mcp-client'
@@ -34,6 +44,28 @@
           - '-e'
           - >-
             const{spawn}=require('node:child_process');const win=process.platform==='win32';const cmd=win?'cmd.exe':'npx';const a=win?['/d','/c','npx','-y','rea-agents@6.4.0','mcp']:['-y','rea-agents@6.4.0','mcp'];const c=spawn(cmd,a,{stdio:'inherit',windowsHide:true,detached:!win});let done=false;const stop=()=>{if(done)return;done=true;try{if(win){spawn('taskkill',['/pid',String(c.pid),'/T','/F'],{stdio:'ignore',windowsHide:true});}else{process.kill(-c.pid,'SIGTERM');}}catch{}};for(const s of ['SIGTERM','SIGINT','SIGHUP'])process.on(s,stop);c.on('exit',(code,sig)=>{done=true;process.exit(code===null?(sig?1:0):code);});
+        env:
+          REA_MCP_INPUT_SCHEMA_PROFILE: compact
+        toolCallTimeoutMs: 1200000
+        maxInstructionBytes: 131072
+        failOnStartupError: false
+    - id: rea-linux
+      name: '@deepseek-ai/dsh-mcp-client'
+      disabled: true
+      config:
+        serverName: rea-linux
+        transport: stdio
+        command: wsl.exe
+        args:
+          - '-d'
+          - 'Ubuntu-24.04'
+          - '-u'
+          - 'root'
+          - '--'
+          - 'npx'
+          - '-y'
+          - 'rea-agents@6.4.0'
+          - 'mcp'
         env:
           REA_MCP_INPUT_SCHEMA_PROFILE: compact
         toolCallTimeoutMs: 1200000

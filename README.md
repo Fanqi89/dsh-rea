@@ -31,7 +31,9 @@ dsh-rea/
 │   └── SETUP.md        # Ghidra / JADX / apktool / adb / 浏览器 依赖配置
 ├── scripts/
 │   ├── setup-rea-tools.ps1  # Windows 一键配置可选依赖
-│   └── apktool-shim.cs      # Windows 上 apktool.exe 启动器模板
+│   ├── apktool-shim.cs      # Windows 上 apktool.exe 启动器模板
+│   ├── setup-wsl-linux-toolchain.ps1  # WSL 2 + Linux 工具链（Linux 专属能力）
+│   └── linux-tools-setup.sh           # WSL 内安装 pwntools/binwalk/unblob/mitmproxy
 ├── CHANGELOG.md        # 每个版本的变更说明
 └── README.md
 ```
@@ -49,6 +51,7 @@ dsh-rea/
 | APK 资源解码 | apktool + `REA_APKTOOL_COMMAND` |
 | Android 设备 | adb（platform-tools）+ `REA_ADB_PATH` |
 | 浏览器 CDP | Chrome / Edge + `REA_BROWSER_EXECUTABLE` |
+| **Linux 专属能力**（ELF 布局 / 崩溃 core / 固件 / mitmproxy / `.deb`） | WSL 2 + Ubuntu 24.04 + pwntools / binwalk / unblob / mitmproxy，由 `scripts/setup-wsl-linux-toolchain.ps1` 准备，再启用补丁里的 `rea-linux` 行 |
 | 调查工作流技能 | `npx skills add morluto/rea --skill reverse-engineer-anything`，或 `npx -y rea-agents@6.4.0 setup --skill --yes`（装与包版本一致的技能） |
 
 > 后四项都用一条命令补齐（Windows）：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-rea-tools.ps1 -WithApktool`
@@ -91,6 +94,25 @@ dsh plugin --profile "$env:DSH_PROFILE" add "X:\path\to\dsh-rea"
 | 进程行为 | 终端输出、交互、退出码、文件系统观测与对比 | Linux/macOS |
 | 固件 / ELF / core | 签名区域、解包、布局、崩溃寄存器 | Linux 工具链 |
 | 证据包 | 导出/导入/比对/重建义务清单/残差未知 | 无 |
+
+## Linux 专属能力（ELF / 固件 / `.deb` / mitmproxy）
+
+REA 有 6 类能力在 Windows 上会被明确拒绝（`unsupported_host`）：ELF 布局（pwntools）、崩溃 core、
+固件（binwalk/unblob）、原生 mitmproxy 抓包、进程捕获（PTY）、历史源码导入；`.deb` / Linux 应用
+目标也只能在 Linux 主机上直接打开。本插件用「**WSL 2 里跑第二个 REA 实例**」补齐：
+
+```powershell
+# 1) 准备 WSL 2 + Ubuntu 24.04 + 工具链（首次启用 WSL 需重启一次，重启后再跑一遍）
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-wsl-linux-toolchain.ps1
+
+# 2) 把 cordis.patch.yml 里 rea-linux 那行的 disabled: true 改成 false，然后重启 Harness
+```
+
+启用后这些工具以 `mcp__rea-linux__*` 出现（约 170 个，token 成本翻倍，建议仅在需要时开）。
+WSL 内会装好：`pwntools`、`binwalk`、`unblob`、`mitmproxy`、`gdb`、`binutils`、`xz`、`Node.js 22`、`rea-agents 6.4.0`。
+
+> 只想先拆 `.deb` 不装 WSL：用 7-Zip 独立版即可（`C:\tools\7zip\7zr.exe x pkg.deb` → `7zr x data.tar.xz`），
+> 但 ELF 的反编译仍需 Linux 实例。
 
 ## 验证
 
@@ -150,7 +172,11 @@ REA 服务器首次冷启动要跑 npx 下载，若几秒内没出工具属正�
 
 完整的「每个版本做了什么、修了什么、怎么验证」见 **[CHANGELOG.md](CHANGELOG.md)**；摘要：
 
-- **v1.2.0**（当前）：按 DSH 插件规范适配——`peerDependencies` 声明 `@deepseek-ai/dsh-mcp-client >= 0.2.0-rc.2`
+- **v1.3.0**（当前）：补齐 Linux 专属线——`scripts/setup-wsl-linux-toolchain.ps1`（WSL 2 + Ubuntu 24.04 +
+  pwntools/binwalk/unblob/mitmproxy/Node 22）、`scripts/linux-tools-setup.sh`，并在补丁里新增默认禁用的
+  `rea-linux` 行（`wsl.exe -d Ubuntu-24.04 … npx rea-agents@6.4.0 mcp`），按需开启即可获得
+  `mcp__rea-linux__*`（ELF 布局 / 崩溃 core / 固件 / `.deb` / mitmproxy / PTY 捕获）。
+- **v1.2.0**：按 DSH 插件规范适配——`peerDependencies` 声明 `@deepseek-ai/dsh-mcp-client >= 0.2.0-rc.2`
   （DSH 加载时校验，旧版本明确报 `incompatible-version`）、新增 `dsh.plugin.json` 注册表清单、
   `icon.svg` 插件卡片图标、`keywords`。桥接补丁与 v1.1.0 相同。
 - **v1.1.0**：补齐「可反编译一切」的依赖链路文档与工具——`docs/CAPABILITIES.md`、
@@ -160,10 +186,11 @@ REA 服务器首次冷启动要跑 npx 下载，若几秒内没出工具属正�
 - **v1.0.1**：单行 + Node 启动器；修复旧构建下第二条平台行显示「异常」的问题。
 - **v1.0.0**：双行 + `disabled: !!js`（在较旧 Harness 上可能出现 1 运行中 / 1 异常）。
 
-四个标签可共存、互不冲突；任意版本都能按标签锁装：
+五个标签可共存、互不冲突；任意版本都能按标签锁装：
 
 ```powershell
-dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.2.0   # 最新（DSH ≥ 0.2.0-rc.2）
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.3.0   # 最新（含 Linux 路线）
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.2.0   # DSH 适配层
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.1.0   # 能力层文档
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.0.1   # 纯桥接，无 peer 声明（旧版 Harness 可用）
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.0.0   # 旧行为（不推荐）
