@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "REA — 万物皆可逆向",
-    "description": "接入本地 REA MCP 服务器（npm: rea-agents），让 Agent 逆向分析原生二进制、JS/Electron 应用、.NET 程序集、APK、固件与网站。工具以 mcp__rea__* 出现。"
+    "description": "接入本地 REA MCP 服务器（npm: rea-agents），让 Agent 反编译与逆向：原生二进制伪代码、APK 类与方法 Java 源码、JS/Electron 应用、.NET 程序集、固件与网站。工具以 mcp__rea__* 出现。"
   }
 }
