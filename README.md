@@ -141,9 +141,12 @@ REA 服务器首次冷启动要跑 npx 下载，若几秒内没出工具属正�
 
 ## 升级 / 版本历史
 
+完整的「每个版本做了什么、修了什么、怎么验证」见 **[CHANGELOG.md](CHANGELOG.md)**；摘要：
+
 - **v1.1.0**（当前）：补齐「可反编译一切」的依赖链路文档与工具——`docs/CAPABILITIES.md`、
-  `docs/SETUP.md`、`scripts/setup-rea-tools.ps1`（Ghidra / JADX / apktool / adb / 浏览器，SHA-256 钉扎）；
-  插件补丁与 v1.0.1 完全一致（单行 + Node 启动器），**升级不影响已装环境**。
+  `docs/SETUP.md`、`scripts/setup-rea-tools.ps1`（Ghidra / JADX / apktool / adb / 浏览器，SHA-256 钉扎）、
+  `scripts/apktool-shim.cs`（Windows 上 apktool 的 exe 启动器）；修复 `package.json` 的 UTF-8 BOM
+  （会让 `dsh plugin add github:…` 全部安装失败）。插件补丁与 v1.0.1 完全一致，**升级不影响已装环境**。
 - **v1.0.1**：单行 + Node 启动器；修复旧构建下第二条平台行显示「异常」的问题。
 - **v1.0.0**：双行 + `disabled: !!js`（在较旧 Harness 上可能出现 1 运行中 / 1 异常）。
 
