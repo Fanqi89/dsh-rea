@@ -20,15 +20,19 @@ mcp__rea__<tool_name>
 
 ```text
 dsh-rea/
-├── package.json        # bundle 清单：dsh.bundle.patch 指向下面的补丁
+├── package.json        # bundle 清单 + DSH peer 兼容性声明 + 图标入口
 ├── cordis.patch.yml    # 插入 dsh-mcp-client 行（单行；平台在 Node 启动器里选择）
+├── dsh.plugin.json     # DSH 插件注册表清单（id/version/engines.dsh/contributes）
+├── icon.svg            # 插件卡片图标（64×64）
 ├── locale/en.json      # 插件卡片标题与描述
 ├── locale/zh.json
 ├── docs/
 │   ├── CAPABILITIES.md # 能反编译什么、还差什么、各平台边界
 │   └── SETUP.md        # Ghidra / JADX / apktool / adb / 浏览器 依赖配置
 ├── scripts/
-│   └── setup-rea-tools.ps1  # Windows 一键配置可选依赖
+│   ├── setup-rea-tools.ps1  # Windows 一键配置可选依赖
+│   └── apktool-shim.cs      # Windows 上 apktool.exe 启动器模板
+├── CHANGELOG.md        # 每个版本的变更说明
 └── README.md
 ```
 
@@ -36,7 +40,7 @@ dsh-rea/
 
 | 项目 | 要求 |
 |---|---|
-| DeepSeek Harness | 需自带 `@deepseek-ai/dsh-mcp-client` 的版本（0.2.0-rc.2 实测通过） |
+| DeepSeek Harness | **≥ 0.2.0-rc.2**（`peerDependencies` + `dsh.plugin.json` 的 `engines.dsh` 声明；DSH 会做运行时校验，低于此版本明确报 `incompatible-version` 而不是静默无工具）。0.2.0-rc.2 实测通过 |
 | Node.js | 22.x (≥22.19)、24.x (≥24.11) 或 26+，且 `npx` 可用（REA 官方要求）；缺 Node 时 Harness 照常启动，但不会出现 `mcp__rea__*` 工具 |
 | 网络 | 首次启动经 `npx -y rea-agents@6.4.0` 拉取 npm 包（之后走 npx 缓存） |
 | 深度原生分析 | 需要本机已有的 Ghidra / IDA（Windows 无 Hopper）；Ghidra 需 `GHIDRA_INSTALL_DIR` |
@@ -107,7 +111,10 @@ REA 服务器首次冷启动要跑 npx 下载，若几秒内没出工具属正�
 - **APK 代码**：JADX 0.7.1 解出 `com.llw` 包信息、`MainActivity.onCreate` 完整 Java 源码；
 - **APK 资源**：apktool 3.0.3 解出完整 Manifest、字符串表、14 个解码文件；
 - **Android 设备**：`inspect_adb_client` 识别 adb 37.0.1；
-- GitHub 源码安装路径实测：`pnpm add github:Fanqi89/dsh-rea#v1.1.0` → 装出 `dsh-rea@1.1.0`。
+- **DSH 适配**（v1.2.0）：`plugin_manager list_bundles` 显示 `dsh-rea v1.2.0`、`enabled: true`、
+  **无 incompatible 标记**（peer `@deepseek-ai/dsh-mcp-client >= 0.2.0-rc.2` 对运行时 0.2.0-rc.2 校验通过），
+  组件仍为单行 `rea-mcp`；
+- GitHub 源码安装路径实测：`pnpm add github:Fanqi89/dsh-rea#v1.2.0` → 装出 `dsh-rea@1.2.0`。
 
 > 已知边界：Windows 路径已端到端验证；macOS / Linux 走同一启动器里的 POSIX 分支
 > （`npx` 直启），逻辑同构但未在真实机器上端到端验证过。
@@ -143,18 +150,22 @@ REA 服务器首次冷启动要跑 npx 下载，若几秒内没出工具属正�
 
 完整的「每个版本做了什么、修了什么、怎么验证」见 **[CHANGELOG.md](CHANGELOG.md)**；摘要：
 
-- **v1.1.0**（当前）：补齐「可反编译一切」的依赖链路文档与工具——`docs/CAPABILITIES.md`、
+- **v1.2.0**（当前）：按 DSH 插件规范适配——`peerDependencies` 声明 `@deepseek-ai/dsh-mcp-client >= 0.2.0-rc.2`
+  （DSH 加载时校验，旧版本明确报 `incompatible-version`）、新增 `dsh.plugin.json` 注册表清单、
+  `icon.svg` 插件卡片图标、`keywords`。桥接补丁与 v1.1.0 相同。
+- **v1.1.0**：补齐「可反编译一切」的依赖链路文档与工具——`docs/CAPABILITIES.md`、
   `docs/SETUP.md`、`scripts/setup-rea-tools.ps1`（Ghidra / JADX / apktool / adb / 浏览器，SHA-256 钉扎）、
   `scripts/apktool-shim.cs`（Windows 上 apktool 的 exe 启动器）；修复 `package.json` 的 UTF-8 BOM
-  （会让 `dsh plugin add github:…` 全部安装失败）。插件补丁与 v1.0.1 完全一致，**升级不影响已装环境**。
+  （会让 `dsh plugin add github:…` 全部安装失败）。
 - **v1.0.1**：单行 + Node 启动器；修复旧构建下第二条平台行显示「异常」的问题。
 - **v1.0.0**：双行 + `disabled: !!js`（在较旧 Harness 上可能出现 1 运行中 / 1 异常）。
 
-三个标签可共存、互不冲突；任意版本都能按标签锁装：
+四个标签可共存、互不冲突；任意版本都能按标签锁装：
 
 ```powershell
-dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.1.0   # 最新
-dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.0.1   # 纯桥接，无文档更新
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.2.0   # 最新（DSH ≥ 0.2.0-rc.2）
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.1.0   # 能力层文档
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.0.1   # 纯桥接，无 peer 声明（旧版 Harness 可用）
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.0.0   # 旧行为（不推荐）
 ```
 

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="REA reverse engineering bridge">
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#1F2A44"/>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="none" stroke="#4C6EF5" stroke-width="2"/>
+  <g fill="none" stroke="#8EA8FF" stroke-width="3" stroke-linecap="round">
+    <circle cx="27" cy="27" r="11"/>
+    <path d="M35 35 L45 45"/>
+  </g>
+  <g fill="#F5F7FF">
+    <circle cx="22" cy="22" r="2.2"/>
+    <circle cx="32" cy="22" r="2.2"/>
+    <circle cx="22" cy="32" r="2.2"/>
+    <circle cx="32" cy="32" r="2.2"/>
+  </g>
+  <g stroke="#4C6EF5" stroke-width="3" stroke-linecap="round">
+    <path d="M14 52 H50"/>
+  </g>
+</svg>

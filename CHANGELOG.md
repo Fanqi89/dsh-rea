@@ -9,6 +9,43 @@ dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.1.0
 
 ---
 
+## v1.2.0 — 2026-10-21
+
+**主题：按 DeepSeek Harness 的插件规范做完整适配（兼容性声明 + 注册表清单 + 卡片图标）。**
+
+> 桥接补丁仍与 v1.0.1 一致（单行 `dsh-mcp-client` + 平台自适应 Node 启动器），
+> 这一版补的是「让 DSH 能识别、校验、展示这个插件」的元数据层。
+
+### 新增
+
+- **`package.json` 增加 DSH 兼容性声明**：
+  `peerDependencies: { "@deepseek-ai/dsh-mcp-client": ">=0.2.0-rc.2" }` +
+  `peerDependenciesMeta` 标记为可选（避免 pnpm 去 registry 拉 Harness 内置包）。
+  DSH 的 `evaluatePluginCompatibility` 会用运行时版本校验这条 peer：低于 `0.2.0-rc.2`
+  时安装/激活明确报 `incompatible-version`，而不是「装上了却没有 `mcp__rea__*` 工具」。
+- **`dsh.plugin.json`**：DSH 插件注册表清单 —— `id`、`version`、`engines.dsh: ">=0.2.0-rc.2"`、
+  `contributes.skills: ["reverse-engineer-anything"]`，供插件市场 / 插件库存页读取。
+- **`icon.svg`**：64×64 插件卡片图标（716 字节，圆角深色底 + 放大镜 + 二进制点），
+  经 `package.json.icon` 与 `exports['./icon.svg']` 暴露。
+- **`keywords`**：`dsh-plugin`、`deepseek-harness`、`mcp`、`reverse-engineering`、`decompiler`。
+
+### 变更
+
+- `exports` / `files` 增加 `icon.svg`，保证安装后卡片图标可用。
+
+### 兼容性验证（本机 DSH 0.2.0-rc.2）
+
+- `plugin_manager list_bundles` → `dsh-rea v1.2.0`，`enabled: true`，**无 incompatible 标记**，
+  组件仍是单行 `rea-mcp`；
+- 4 个 JSON（`package.json` / `dsh.plugin.json` / `locale/*.json`）均可解析，图标 716 B。
+
+### 升级提示
+
+- 从 ≤ v1.1.0 升级：同一 spec 重装会返回 `ambiguous-install`，先卸载再装，然后重启 Harness。
+- DSH 低于 `0.2.0-rc.2` 的用户请继续用 v1.0.1（该版本不声明 peer）。
+
+---
+
 ## v1.1.0 — 2026-10-21
 
 **主题：把「能反编译一切」变成可复现、可验证的一条命令。**
