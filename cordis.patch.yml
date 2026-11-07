@@ -1,54 +1,113 @@
-# dsh-rea — REA (Reverse Engineer Anything) MCP bridge for DeepSeek Harness.
+# dsh-rea - REA (Reverse Engineer Anything) MCP bridge for DeepSeek Harness.
 # https://github.com/morluto/rea
 #
-# Configuration-only bundle: it inserts the already-shipped
-# @deepseek-ai/dsh-mcp-client with REA's local stdio server
-# (npm package `rea-agents`, launched through the package runner), and the
-# server's tools register on the model as mcp__rea__<tool_name>.
+# Configuration-only bundle: it inserts the shipped @deepseek-ai/dsh-mcp-client
+# with REA's local stdio server; that server's tools register on the model as
+# mcp__rea__<tool_name> (170 tools, longest public name 48 chars).
 #
-# ONE row, platform chosen inside a tiny Node launcher:
-#   - Windows: cmd.exe /d /c npx … (Node cannot spawn the npx.cmd shim directly)
-#   - POSIX  : npx …
-# Why one row instead of two rows with `disabled: !!js`? Older Harness builds
-# can ignore or mis-parse a `!!js` expression in `disabled`; the second row
-# then activates, hits the duplicate-serverName rule and shows up as a failed
-# component ("异常"). A single row with literal strings works on every Harness
-# that can spawn a stdio MCP server, and it keeps exactly one `rea` server.
+# Why ONE row: a serverName may be registered only once per scope, so a second
+# row that also said `rea` would collide whenever both rows are active. Every
+# platform difference therefore lives inside one small Node launcher instead.
+# This is an identity decision, not a `!!js` workaround: on DSH >= 0.2.1-rc.2 an
+# expression in `disabled` and in patch `config` values is fully supported
+# (app-boot parses this file with the entry-list dialect, tag:yaml.org,2002:js,
+# and types `disabled` as boolean|null|loaderExpression; the Loader evaluates
+# both through interpolate()/disabledOf()). Evidence: docs/COMPAT-VERSIONS.md.
+#
+# Why `command: !!js process.execPath` (not `node`)?
+#   - It is the runtime Harness itself runs on: the Electron binary with
+#     ELECTRON_RUN_AS_NODE=1 (Node 24.x), or plain node for a CLI install. No
+#     dependence on a `node`/npx on PATH - which is exactly what breaks for a
+#     macOS app launched from Finder/Dock and on Windows without Node installed.
+#   - Must be paired with ELECTRON_RUN_AS_NODE=1 in `env` (below); without it the
+#     child opens a second Harness window instead of running the script. Safe on
+#     every DSH build: the shipped headless launcher
+#     (resources/runtime/cli/bin/dsh.cmd) relies on the same mechanism.
+#   - REA requires Node ^22.19 || ^24.11 || >=26. The Harness runtime satisfies
+#     that on every supported DSH version; a user's PATH `node` may not (Node
+#     18/20 is still common), and a too-old runtime is a silent tool failure.
+#   - Verified here: Electron 44.7.0 as Node 24.21.0 loads REA's native
+#     @lydell/node-pty (N-API, ABI-stable) and completes a full MCP handshake.
+#
+# Launcher resolution order (the -e script below):
+#   1. $REA_MCP_ENTRY                      explicit entry file (`.../rea.mjs`)
+#   2. $REA_MCP_HOME/agents/<ver>/node_modules/rea-agents/scripts/rea.mjs
+#      default home = <home>/.rea/dsh, ver = $REA_MCP_VERSION or 6.4.0.
+#      Prepared by scripts/setup-rea-tools.ps1 (Windows) or
+#      scripts/setup-rea-tools.sh (macOS/Linux). Once present, start-up needs no
+#      npm/npx and no network, and is faster (~6.9 s vs ~16.8 s measured).
+#   3. npx -y rea-agents@<ver> mcp         (needs network + a usable node on PATH)
+# Every branch appends one line to <home>/launcher.log (64 KiB cap) with the
+# resolved command, the runtime version and the exit status - the first place to
+# look when the tools do not show up. On Windows that file also records spawn
+# errors that the MCP client only reports as an absent server.
 #
 # Knobs:
 # - env REA_MCP_INPUT_SCHEMA_PROFILE=compact advertises smaller input schemas
-#   (far fewer tokens per request). Remove the env block for the full profile.
-# - toolCallTimeoutMs bounds one tools/call; native providers (Ghidra/Hopper)
-#   can spend minutes on their first query, so the default 60 s is raised here.
-# - failOnStartupError stays false so the Harness boots even when the REA
-#   server cannot start (missing Node/network); the tools then simply stay
-#   absent until the connection succeeds.
+#   (170 tools; the compact profile is ~1.7 MB of JSON, the full one is larger).
+# - toolCallTimeoutMs bounds one tools/call; native providers (Ghidra) can spend
+#   minutes on their first query, so the default 60 s is raised here.
+# - maxInstructionBytes is left at its 32 KiB default: REA's initialize
+#   instructions measure 304 B (+21 B attribution header), so a bigger cap buys
+#   nothing. Overshooting that cap is NOT truncation - it is treated as a failed
+#   connection and retried, i.e. the whole server disappears.
+# - failOnStartupError stays false so the Harness always boots: the first connect
+#   is awaited with no internal timeout, and REA's cold start is ~14 s, so a
+#   failure must degrade to "no tools yet", never to a boot failure.
+# - reconnect widens the retry budget from the default 10 attempts / 30 s cap
+#   (~2 min) to ~1 h, so starting the Harness before the network is up, before
+#   WSL is running, or before the local install finished does not cost the rest
+#   of the session. Only the four documented sub-keys are used: an unknown
+#   sub-key makes resolveReconnectPolicy throw and the whole row fails to load.
 #
-# Second, DISABLED row: a Linux REA instance for the families REA gates to
-# Linux (ELF layout via pwntools, firmware via binwalk/unblob, native
-# mitmproxy captures, crash cores) and for .deb / Linux application targets
-# opened from a Linux host. Prepare that host first with
-#   powershell -File .\scripts\setup-wsl-linux-toolchain.ps1
+# Second, DISABLED row: a Linux REA instance for the families REA gates to Linux
+# (ELF layout via pwntools, firmware via binwalk/unblob, native mitmproxy
+# captures, crash cores) and for .deb / Linux application targets opened from a
+# Linux host. On Windows prepare it inside WSL first with
+#   powershell -File ./scripts/setup-wsl-linux-toolchain.ps1
 # then flip `disabled: true` to `false` here (or in your profile patch) and
-# restart the Harness. Enabling adds another ~170 tools (token cost). A plain
-# literal `true` is used on purpose: no `!!js` expression is involved, so no
-# Harness build can mis-parse it.
+# restart the Harness. Enabling adds another ~170 tools (token cost). A literal
+# `true` is used on purpose, so the row cannot flip by accident.
+# WSL_UTF8=1 keeps wsl.exe from emitting UTF-16 status text, which would corrupt
+# the JSON-RPC stream the first time WSL prints a setup/progress message.
+
 - insert:
     - id: rea-mcp
       name: '@deepseek-ai/dsh-mcp-client'
       config:
         serverName: rea
         transport: stdio
-        command: node
+        command: !!js process.execPath
         args:
           - '-e'
           - >-
-            const{spawn}=require('node:child_process');const win=process.platform==='win32';const cmd=win?'cmd.exe':'npx';const a=win?['/d','/c','npx','-y','rea-agents@6.4.0','mcp']:['-y','rea-agents@6.4.0','mcp'];const c=spawn(cmd,a,{stdio:'inherit',windowsHide:true,detached:!win});let done=false;const stop=()=>{if(done)return;done=true;try{if(win){spawn('taskkill',['/pid',String(c.pid),'/T','/F'],{stdio:'ignore',windowsHide:true});}else{process.kill(-c.pid,'SIGTERM');}}catch{}};for(const s of ['SIGTERM','SIGINT','SIGHUP'])process.on(s,stop);c.on('exit',(code,sig)=>{done=true;process.exit(code===null?(sig?1:0):code);});
+            const{spawn}=require('node:child_process'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');const
+            V=process.env.REA_MCP_VERSION||'6.4.0',win=process.platform==='win32',home=process.env.REA_MCP_HOME||path.join(os.homedir(),'.rea','dsh');const
+            isFile=p=>{try{return fs.statSync(p).isFile()}catch{return false}};const
+            log=m=>{try{fs.mkdirSync(home,{recursive:true});const
+            f=path.join(home,'launcher.log');try{if(fs.statSync(f).size>65536)fs.truncateSync(f,0)}catch{}fs.appendFileSync(f,new
+            Date().toISOString()+' node='+process.versions.node+'
+            electron='+(process.versions.electron||'-')+' '+m+'\n')}catch{}};const
+            env=Object.assign({},process.env,{ELECTRON_RUN_AS_NODE:'1'});const
+            entry=process.env.REA_MCP_ENTRY||path.join(home,'agents',V,'node_modules','rea-agents','scripts','rea.mjs');let
+            cmd,args,how;if(isFile(entry)){cmd=process.execPath;args=[entry,'mcp'];how='local-install'}else
+            if(win){cmd=process.env.ComSpec||'cmd.exe';args=['/d','/s','/c','npx','-y','rea-agents@'+V,'mcp'];how='npx'}else{cmd='npx';args=['-y','rea-agents@'+V,'mcp'];how='npx'}log('launch
+            '+how+' cmd='+cmd+' args='+JSON.stringify(args));const
+            child=spawn(cmd,args,{stdio:'inherit',windowsHide:true,detached:!win,env:env});let
+            closed=false;const
+            stop=()=>{if(closed)return;closed=true;try{if(win){spawn('taskkill',['/pid',String(child.pid),'/T','/F'],{stdio:'ignore',windowsHide:true})}else{process.kill(-child.pid,'SIGTERM');setTimeout(()=>{try{process.kill(-child.pid,'SIGKILL')}catch{}},1200)}}catch{}};for(const
+            s of ['SIGTERM','SIGINT','SIGHUP'])process.on(s,stop);child.on('error',e=>{log('spawn error
+            '+(e.code||'')+' '+e.message);process.stderr.write('[dsh-rea] cannot start the REA MCP server
+            ('+how+'): '+e.message+'\n');process.exit(1)});child.on('exit',(c,s)=>{closed=true;log('server
+            exit code='+c+' signal='+s);process.exit(c===null?(s?1:0):c)});
         env:
+          ELECTRON_RUN_AS_NODE: '1'
           REA_MCP_INPUT_SCHEMA_PROFILE: compact
         toolCallTimeoutMs: 1200000
-        maxInstructionBytes: 131072
         failOnStartupError: false
+        reconnect:
+          maxAttempts: 60
+          maxDelayMs: 60000
     - id: rea-linux
       name: '@deepseek-ai/dsh-mcp-client'
       disabled: true
@@ -62,12 +121,15 @@
           - '-u'
           - 'root'
           - '--'
-          - 'npx'
+          - npx
           - '-y'
-          - 'rea-agents@6.4.0'
-          - 'mcp'
+          - rea-agents@6.4.0
+          - mcp
         env:
+          WSL_UTF8: '1'
           REA_MCP_INPUT_SCHEMA_PROFILE: compact
         toolCallTimeoutMs: 1200000
-        maxInstructionBytes: 131072
         failOnStartupError: false
+        reconnect:
+          maxAttempts: 60
+          maxDelayMs: 60000

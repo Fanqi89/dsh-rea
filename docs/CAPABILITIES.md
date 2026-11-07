@@ -98,3 +98,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-wsl-linux-to
 | 2026-10-21 | Android 设备 | `inspect_adb_client` 识别 adb `37.0.1-15733141`（路径来自 `REA_ADB_PATH`） |
 | 2026-10-21 | doctor | Ghidra 全项绿（version 12.1.4 / native decompiler win_x86_64 / JDK 21 64-bit / native authority） |
 | 2026-10-21 | capabilities | 18 项 provider 操作：8 可用 / 10 macOS 专属不可用（Windows 预期） |
+| 2026-11-07 | MCP 接入（v1.4.0 启动链） | 真实 DSH 0.2.1-rc.5 宿主端到端：`cli host → DeepSeek Harness.exe -e "<启动器>" → rea.mjs mcp`，服务进程存活、`launcher.log` 记录 `launch local-install`、stderr 无告警 |
+| 2026-11-07 | MCP 握手（v1.4.0） | Electron 44.7.0 as Node 24.21.0：`initialize` 4.9–6.9 s（本地层）/ 16.8 s（npx 层）、`instructions` 304 B、`tools/list` **170 个**、公开名全部 ≤64 字符（最长 48） |
+| 2026-11-07 | 跨版本审计 | DSH 0.2.1-rc.2 / rc.3 / rc.4 / rc.5 / 0.2.2-rc.1：`dsh-mcp-client` 配置面逐字节相同，`!!js` 全版本受支持，详见 [COMPAT-VERSIONS.md](COMPAT-VERSIONS.md) |
+
+### 6.1 启动链路（与逆向能力无关，但决定「工具能不能出现」）
+
+```text
+dsh-mcp-client 行（bundle 补丁）
+  └─ command: !!js process.execPath + ELECTRON_RUN_AS_NODE=1   # Harness 自带 Node
+       └─ 启动器（~/.rea/dsh/launcher.log 记录命中层与退出码）
+            ├─ 1. $REA_MCP_ENTRY
+            ├─ 2. ~/.rea/dsh/agents/6.4.0/…/scripts/rea.mjs    # 离线本地层（setup 脚本准备）
+            └─ 3. npx -y rea-agents@6.4.0 mcp                  # 兜底（需网络 + PATH 上的 npx）
+```
+
+因此「没装 Node」「PATH 上 Node 太旧」「从 Finder 启动的 app 没有 npx」都不再导致静默缺工具；
+按 [SETUP-POSIX.md](SETUP-POSIX.md) 或 [SETUP.md](SETUP.md) 的脚本装一次本地层即可完全离线。

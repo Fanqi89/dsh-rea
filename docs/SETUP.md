@@ -1,7 +1,10 @@
 # 环境配置（Windows / macOS / Linux）
 
 > 插件本体零依赖；这份文档只解决「要反编译**原生二进制**、**APK 代码/资源**、**Android 设备**、**浏览器页面**时还缺什么」。
-> 一键脚本：[`scripts/setup-rea-tools.ps1`](../scripts/setup-rea-tools.ps1)（Windows）。macOS / Linux 用本文档里的手动步骤。
+> 一键脚本：[`scripts/setup-rea-tools.ps1`](../scripts/setup-rea-tools.ps1)（Windows）、
+> [`scripts/setup-rea-tools.sh`](../scripts/setup-rea-tools.sh)（macOS / Linux，见 [SETUP-POSIX.md](SETUP-POSIX.md)）。
+> 插件启动链本身**不需要**任何外部依赖变量：它优先用 `~/.rea/dsh` 下的本地固定安装，其次 `npx` 兜底，
+> 并用 Harness 自带的 Node 运行（不依赖 PATH 上的 node/npx）。
 
 ## 0. 依赖总览
 
@@ -23,14 +26,30 @@
 # 预览，不下载、不改环境
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-rea-tools.ps1 -DryRun
 
-# 正式执行：JDK 探测 + Ghidra + 浏览器 + adb + JADX + 技能 + doctor
+# 正式执行：JDK 探测 + 浏览器 + adb + JADX + 技能 + doctor
+# （默认还会把 rea-agents 固定安装到 %USERPROFILE%\.rea\dsh\agents\6.4.0，
+#   让插件启动走离线本地层；不想装就加 -SkipAgents）
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-rea-tools.ps1
 
 # 额外装 apktool（APK 资源解码）
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-rea-tools.ps1 -WithApktool
 ```
 
-参数：`-ToolsRoot C:\tools`、`-SkipGhidra`、`-SkipAdb`、`-SkipJadx`、`-SkipSkill`、`-WithApktool`、`-DryRun`。
+参数：`-ToolsRoot C:\tools`、`-SkipGhidra`、`-SkipAdb`、`-SkipJadx`、`-SkipSkill`、`-SkipAgents`、
+`-WithApktool`、`-DryRun`。
+
+### REA MCP 服务器本地固定安装（插件启动的 2 号层）
+
+启动器按 `$REA_MCP_ENTRY` → `%USERPROFILE%\.rea\dsh\agents\6.4.0\node_modules\rea-agents\scripts\rea.mjs`
+→ `npx -y rea-agents@6.4.0 mcp` 的顺序解析。手动准备第 2 层：
+
+```powershell
+npm install --prefix "$env:USERPROFILE\.rea\dsh\agents\6.4.0" rea-agents@6.4.0 --no-audit --no-fund
+Test-Path "$env:USERPROFILE\.rea\dsh\agents\6.4.0\node_modules\rea-agents\scripts\rea.mjs"   # → True
+```
+
+装好后启动不再需要网络与 npm/npx，冷启动也从 ~16.8 s 降到 ~5–7 s。命中哪一层写进
+`%USERPROFILE%\.rea\dsh\launcher.log`。卸载：`Remove-Item -Recurse "$env:USERPROFILE\.rea\dsh"`。
 
 脚本只写**用户级**环境变量（不需要管理员），已存在且有效的值不覆盖；下载物均做 SHA-256 校验：
 
@@ -116,9 +135,19 @@ Add-Type -TypeDefinition $cs -Language CSharp -OutputAssembly C:\tools\apktool\a
 
 ### 2.6 macOS / Linux
 
-- 原生：安装 Ghidra 后 `export GHIDRA_INSTALL_DIR=...`（Hopper 仅 macOS；IDA 任意平台 + `REA_IDA_MCP_CONFIG`）。
-- JADX/apktool/adb 同理，用 `export REA_JADX_MCP_JAR=…`、`REA_APKTOOL_COMMAND=…`、`REA_ADB_PATH=…`。
-- Linux 额外可用：`inspect_binary_layout`（pwntools）、core 分析、binwalk/unblob 固件、mitmproxy 抓包、进程捕获。
+一条命令（推荐，细节见 [SETUP-POSIX.md](SETUP-POSIX.md)）：
+
+```bash
+bash scripts/setup-rea-tools.sh --dry-run     # 先看计划
+bash scripts/setup-rea-tools.sh               # JDK 探测 + Ghidra + JADX + adb + apktool + 浏览器 + rea-agents 本地安装
+```
+
+手动时对应的变量（macOS / Linux 同名）：`export GHIDRA_INSTALL_DIR=…`、`REA_JADX_MCP_JAR=…`、
+`REA_APKTOOL_COMMAND=…`（必须是**可执行文件**，可以是一个 `#!/bin/sh` wrapper）、`REA_ADB_PATH=…`、
+`REA_BROWSER_EXECUTABLE=…`。注意从 Dock / Finder 启动的 app 读不到你 shell 里的 `export`，
+需要 `launchctl setenv` 或 wrapper 启动（SETUP-POSIX.md 有细节）；**本地固定层不需要这些变量**。
+平台能力：Hopper 仅 macOS；Linux 额外可用 `inspect_binary_layout`（pwntools）、core 分析、
+binwalk/unblob 固件、mitmproxy 抓包、进程捕获。
 
 ### 2.7 Windows 上的 Linux 专属线（WSL 2）
 

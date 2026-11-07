@@ -1,0 +1,8 @@
+# Nothing is line-ending-converted unless a rule below says so: the shipped
+# files are consumed verbatim (JSON must stay BOM-free, the .ps1 scripts carry a
+# UTF-8 BOM for PowerShell 5.1, icon.svg is text).
+* -text
+
+# POSIX provisioning/helper scripts must keep LF on every checkout: a CRLF
+# checkout breaks `set -euo pipefail` with "invalid option name" on Linux/macOS.
+*.sh text eol=lf

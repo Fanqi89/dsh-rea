@@ -9,6 +9,107 @@ dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.1.0
 
 ---
 
+## v1.4.0 — 2026-11-07
+
+**主题：把「装完就能用」做成跨 DSH 版本、跨平台的可靠启动链（Windows 桌面版 / 无头 CLI，macOS / Linux）。**
+
+这一版不新增逆向能力，只修启动可靠性：**在一个没有 node 的环境、一个 PATH 上 Node 太旧的环境、
+一个从 Finder 启动的 macOS app、一个先开 Harness 后连网的环境里，都不再静默丢工具**，
+并且给「工具为什么没出现」留下可读的证据。全部结论来自对 5 个 DSH 版本的发布产物审计 +
+本机端到端实测（证据见 `docs/COMPAT-VERSIONS.md`）。
+
+### 修复（现象 → 根因 → 修法）
+
+1. **macOS 从 Finder/Dock 启动的 Harness 里没有 `mcp__rea__*` 工具**
+   → Finder 启动的 app 环境变量极简（`PATH=/usr/bin:/bin:/usr/sbin:/sbin`），启动器里的 `node`/`npx`
+   根本不在 PATH 上，子进程直接 ENOENT。
+   → `command: node` 改为 `command: !!js process.execPath` + `env.ELECTRON_RUN_AS_NODE: '1'`：
+   用 Harness 自己的运行时可执行文件（桌面版是 Electron 二进制以 Node 模式运行，npm/CLI 安装则是 node），
+   与 PATH 无关。DSH 自己的无头启动器 `resources/runtime/cli/bin/dsh.cmd` 用的就是同一机制，故一定可用。
+2. **Windows 没装 Node、或 PATH 上是 Node 18/20 时同样没有工具（或 REA 起来就崩）**
+   → REA 的 `engines` 是 `^22.19.0 || ^24.11.0 || >=26.0.0`；旧 Node 上不是报错而是各种静默失败。
+   → 同上改用 Harness 自带 Node（本机实测 Electron 44.7.0 as Node **24.21.0**，`modules=149`），
+   并实测它加载 REA 的原生依赖 `@lydell/node-pty`（N-API，ABI 稳定）与完成完整 MCP 握手都正常。
+3. **每次启动都要 14–17 秒才出工具，离线/代理不通时干脆没有**
+   → 启动器每次都走 `npx -y rea-agents@6.4.0`：npx 要解析 registry、要 PATH 上有 node。
+   → 启动器改为**三层解析**：`$REA_MCP_ENTRY` → `~/.rea/dsh/agents/6.4.0/…/scripts/rea.mjs`（本地固定安装）
+   → `npx` 兜底。命中本地层时用 Harness 的 Node 直接跑入口，**离线可用**；实测 `initialize` 从
+   16.8 s（npx 冷）降到 **4.9–6.9 s**。本地层由 `scripts/setup-rea-tools.ps1` 新增的 1b 步
+   （`npm install --prefix`）或 `scripts/setup-rea-tools.sh` 第 8 步准备。
+4. **一次启动期失败就永久没有工具**（要重启 Harness 才能恢复）
+   → `dsh-mcp-client` 默认 reconnect 只有 10 次、30 s 上限（约 2 分钟后**注销工具并停止**），
+   而「先开 Harness、后连网 / 后启 WSL / 本地安装还没装完」是极常见的顺序。
+   → 显式放宽为 `maxAttempts: 60` / `maxDelayMs: 60000`（约 1 小时自愈窗口）。
+5. **`peerDependencies` 被当成 DSH 版本约束**（DSH 版本不满足时报 incompatible）
+   → `dsh-app-boot` 的规则是：有 `engines.dsh` 时**只用它**判定 DSH 版本，否则拿所有 `@deepseek-ai/dsh*`
+   peer 去和运行时版本比对；v1.3.0 只有 `peerDependencies["@deepseek-ai/dsh-mcp-client"]`，语义被错用。
+   → `package.json` 与 `dsh.plugin.json` 都写 `engines: { "dsh": ">=0.2.1-rc.2" }`，peer 归位为
+   「mcp-client 包版本」；已用 semver + `includePrerelease` 实算确认对 0.2.1-rc.2 / rc.3 / rc.4 / rc.5 /
+   0.2.2-rc.1 全部满足（**去掉 includePrerelease 会全部不满足**——这是预发布版本能互相兼容的关键，不要“修正”范围）。
+6. **「工具没出现」没有任何可查证据**
+   → 启动器每次启动追加一行到 **`~/.rea/dsh/launcher.log`**（上限 64 KiB）：时间、`node`/`electron` 版本、
+   命中的层、完整命令行、以及子进程退出码。
+7. **Windows 上以 CRLF 检出仓库会让 `.sh` 直接坏掉**（`set -euo pipefail` 报 invalid option name）
+   → 新增 `.gitattributes`：`* -text`（其余文件字节不变，保住 JSON 无 BOM / `.ps1` 有 BOM）+ `*.sh text eol=lf`。
+8. **`rea-linux` 行首次启动可能被 WSL 的 UTF-16 状态文本污染 JSON-RPC**
+   → 该行 `env` 增加 `WSL_UTF8: '1'`。
+9. **v1.0.1 起注释里的理由写错了**（“旧 Harness 会误解析 `disabled` 里的 `!!js`”）
+   → 审计确认 0.2.1-rc.2 起 `!!js` 在 patch `config` 值与 `disabled` 上都受支持；
+   保留单行的真实原因是**同一作用域内 `serverName` 只能注册一次**。注释按真实理由重写。
+
+### 新增
+
+- **`scripts/setup-rea-tools.sh`**（macOS / Linux 一键配置，1,047 行）：
+  9 步（Node ≥22.19 校验 → JDK 21+ → Ghidra 12.1.4 下载/校验/解压 → JADX jar → adb → apktool 可执行
+  wrapper → 浏览器 → **rea-agents 本地固定安装** → doctor 汇总），支持 `--dry-run`、`--skip-*`、
+  `--tools-root`、`--apktool-jar`；刻意只用 bash 3.2 特性（macOS 自带 bash），输出纯 ASCII，
+  从不自动装系统包、从不改 shell profile（缺失项打印 `[hint]` + 精确命令）。
+- **`docs/SETUP-POSIX.md`**：macOS / Linux 的前置、产物路径、环境变量表、**Dock/Finder 启动的 app
+  如何看到环境变量**（`launchctl setenv` / wrapper，并说明本地固定层根本不需要这些变量）、
+  JSON-RPC 探针、Gatekeeper 隔离属性、卸载/回滚。
+- **`docs/COMPAT-VERSIONS.md`**：DSH `0.2.1-rc.2 → 0.2.2-rc.1` × `dsh-mcp-client` / `dsh-app-boot` 的
+  逐版本审计（10 个 npm tarball 全解包、逐字节 sha256、`!!js` 求值点、env 清洗、reconnect、
+  启动等待、semver 矩阵、REA 服务端实测、未验证清单）。
+- `$REA_MCP_ENTRY` / `$REA_MCP_HOME` / `$REA_MCP_VERSION` 三个环境变量（入口覆盖、安装根、版本钉扎）。
+- `scripts/setup-rea-tools.ps1` 新增 **1b 步**「REA MCP 服务器本地固定安装」与 `-SkipAgents`；
+- `.gitattributes`。
+
+### 变更
+
+- `cordis.patch.yml`：`command` 改 `!!js process.execPath`，`env` 增 `ELECTRON_RUN_AS_NODE`；
+  启动器 616 B → 1,858 B（三层解析 + 日志 + 信号升级）；移除 `maxInstructionBytes: 131072`
+  （REA 的 instructions 实测 304 B，默认 32768 有百倍余量；超限不是截断而是判成连接失败）；
+  新增 `reconnect`；`rea-linux` 行加 `WSL_UTF8`。
+- `engines.dsh` / `peerDependencies` 统一到 `>=0.2.1-rc.2`（0.2.0-rc.2 用户请继续用 v1.3.0）。
+- README：环境要求、配置项表、工作原理图、故障排查按新启动链重写。
+
+### 验证（本机 Windows 10 · DSH 0.2.1-rc.5 · rea-agents 6.4.0）
+
+- **跨版本审计**：`dsh-mcp-client` rc.2==rc.3（`lib/index.js` sha256 `758d8fc4…`）、
+  rc.4==rc.5==0.2.2-rc.1（`64dfc912…`），配置面逐字节相同；`dsh-app-boot` rc.2–rc.5 同一文件
+  （`5135179a…`），0.2.2-rc.1 的改动（platform 门禁 / insert clone / 删 5 个导出）都不落在本 bundle 使用面上。
+- **schema 实跑**：两条 row 用真实 Config（schemastery 3.18.5 与 3.19.0 各一遍）校验通过；
+  `reconnect` 解析为 `{enabled:true, initialDelayMs:500, maxDelayMs:60000, maxAttempts:60}`；
+  `maxInstructionBytes` 取默认 32768。
+- **真实宿主端到端**（独立 `DSH_HOME` + 独立端口，不碰用户正在跑的桌面实例）：
+  `dsh --profile probe --dump-config` 输出 `# == dsh-rea` 层 → `dsh --profile probe --no-open --port 46124`
+  真启动 → 进程树实测 `cli host` → `DeepSeek Harness.exe -e "<启动器>"` → `…/rea.mjs mcp`，
+  服务进程保持存活（连接失败会被回收），`launcher.log` 记录 `launch local-install`，stderr 无告警。
+- **MCP 握手**（Electron 44.7.0 as Node 24.21.0，直接跑 YAML 里的启动器）：`initialize` 4.9–6.9 s，
+  `serverInfo {rea, 6.4.0}`，`instructions` 304 B，`tools/list` **170 个**，全部公开名 ≤64 字符（最长 48）。
+- **兜底层**：临时移走本地安装后重跑，`launcher.log` 记录 `launch npx`，握手仍成功（16.8 s）。
+- 行尾卫生：`git check-attr` 确认 `scripts/*.sh → text: set, eol: lf`，其余 `text: unset`。
+
+### 已知限制
+
+- macOS / Linux 只有脚本级验证（`bash -n`、`--dry-run` 全流程、假 `uname` 下的 apktool wrapper 行为、
+  POSIX 探针命令在本机 `~/.rea` 安装上实跑），**没有在真实 macOS / Linux 桌面上做过端到端**。
+- 仓库审计范围是 0.2.1-rc.2 → 0.2.2-rc.1；更早版本（0.2.1-rc.1 及以下）未审计，`engines.dsh` 已把它们挡住。
+- `@modelcontextprotocol/client@2.2.0` 内部（连接超时、`cwd: ''` 处理）未读源码，属于未验证面。
+- JEB / Hopper / macOS 专属 10 个操作等平台边界与 v1.3.0 相同，没有变化。
+
+---
+
 ## v1.3.0 — 2026-10-21
 
 **主题：补齐 Linux 专属分析线（WSL 2 + Linux 工具链 + 可选 Linux REA 实例）。**

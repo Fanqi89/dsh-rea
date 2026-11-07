@@ -6,6 +6,8 @@
 .DESCRIPTION
   只做“让 REA 的原生反编译、Android、浏览器分析线可用”这件事：
     1. 检查 Node.js / npx
+    1b. 把 rea-agents 固定安装到 %USERPROFILE%\.rea\dsh\agents\<版本>（插件 launcher 优先用它：
+        离线、无需 npm/npx、冷启动更快；失败时插件仍会退回 npx 路径）
     2. 找到或指定可用的 JDK 21+（Ghidra 需要完整 JDK：java + javac）
     3. 下载并校验、解压 Ghidra 12.1.4，写入 GHIDRA_INSTALL_DIR
     4. 检测 Chrome / Edge，写入 REA_BROWSER_EXECUTABLE
@@ -23,6 +25,9 @@
 .PARAMETER ToolsRoot
   工具安装根目录，默认 C:\tools（会自动创建）。
 
+.PARAMETER SkipAgents
+  跳过 1b 步：不把 rea-agents 固定安装到 %USERPROFILE%\.rea\dsh（插件会退回 npx 路径）。
+
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-rea-tools.ps1 -DryRun
 
@@ -39,12 +44,14 @@ param(
   [switch]$SkipJadx,
   [switch]$WithApktool,
   [switch]$SkipSkill,
+  [switch]$SkipAgents,
   [switch]$DryRun
 )
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-$ReaPkg = 'rea-agents@6.4.0'
+$ReaVersion = '6.4.0'
+$ReaPkg = "rea-agents@$ReaVersion"
 
 $GhidraVersion = '12.1.4'
 $GhidraUrl = 'https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.4_build/ghidra_12.1.4_PUBLIC_20260921.zip'
@@ -167,6 +174,35 @@ $npxExe = $null
 if ($npx) { $npxExe = $npx.Source }
 Write-Ok "node $nodeVersion"
 if (-not $npx) { Write-Warn2 'npx 未找到；后续安装技能与 doctor 会失败' } else { Write-Ok "npx: $($npx.Source)" }
+
+# -------------------------------------------- 1b. REA MCP 服务器（本地固定安装）
+# 插件 launcher 的解析顺序：$REA_MCP_ENTRY → %USERPROFILE%\.rea\dsh\agents\<ver>\…\rea.mjs → npx。
+# 这里只准备第 2 层：装好后启动不依赖 npm/npx 与网络，冷启动也明显更快。
+$ReaHome = Join-Path $env:USERPROFILE '.rea\dsh'
+$reaInstall = Join-Path $ReaHome "agents\$ReaVersion"
+$reaEntry = Join-Path $reaInstall 'node_modules\rea-agents\scripts\rea.mjs'
+$npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+if (-not $npm) { $npm = Get-Command npm -ErrorAction SilentlyContinue }
+Write-Step "REA MCP 服务器本地固定安装（$ReaVersion）"
+if ($SkipAgents) {
+  Write-Warn2 '跳过本地固定安装（-SkipAgents）；插件将退回 npx 路径'
+} elseif (Test-Path -LiteralPath $reaEntry) {
+  Write-Ok "已存在：$reaEntry"
+} elseif ($DryRun) {
+  Write-Info "would run npm install --prefix `"$reaInstall`" $ReaPkg --no-audit --no-fund"
+} elseif (-not $npm) {
+  Write-Warn2 'npm 未找到，跳过本地固定安装；插件仍可用 npx 路径启动（需要网络）'
+} else {
+  New-Item -ItemType Directory -Force -Path $reaInstall | Out-Null
+  $out = Invoke-Native $npm.Source @('install', '--prefix', $reaInstall, $ReaPkg, '--no-audit', '--no-fund', '--loglevel', 'error')
+  if (Test-Path -LiteralPath $reaEntry) {
+    Write-Ok "入口：$reaEntry"
+    Write-Info "日志：$(Join-Path $ReaHome 'launcher.log')（插件每次启动会追加一行解析结果）"
+  } else {
+    $tail = ($out.Trim() -split "`n" | Select-Object -Last 4) -join ' | '
+    Write-Warn2 "安装完成但没有入口文件；插件将退回 npx 路径。尾部输出：$tail"
+  }
+}
 
 # ---------------------------------------------------------------- 2. JDK
 Write-Step '检查 JDK（Ghidra / JADX / apktool 都需要完整 JDK 17+：java + javac）'
