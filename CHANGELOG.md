@@ -9,6 +9,63 @@ dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.1.0
 
 ---
 
+## v1.4.1 — 2026-11-15
+
+**主题：文档层——收录徽章 + README 图标 + issue #1 收尾（运行时零改动）。**
+
+### 新增
+
+- **README 顶部图标**：仓库自有 `icon.svg`（96×96，相对路径，GitHub / 各镜像 / 本地预览都能显示）。
+  顺带核实：市场侧图标早就在用**同一份文件**——dshopen.org 的插件图标
+  `https://dshopen.org/icons/9063e15…svg` 与本地 `icon.svg` 逐字节相同（716 B），
+  说明它按 `package.json` 的 `"icon": "./icon.svg"` 抓取，无需改任何清单。
+- **三个收录徽章**（逐个 curl 验证，都是 200 + 目标页面可达）：
+
+  | 徽章 | 图片 | 链接 | 实测内容 |
+  |---|---|---|---|
+  | 开放插件市场 | `img.shields.io/endpoint?url=https%3A%2F%2Fdshopen.org%2Fbadge%2Fdsh-rea.json` | <https://dshopen.org/zh/plugins/dsh-rea/> | JSON 返回 `label=开放插件市场`、`message=已收录 · ♥ 50`、`color=2563eb`；页面标 `已审查`、`🔥 增长快` |
+  | 安装验证 | `dpharness.com/badge/install/Fanqi89/dsh-rea.svg` | <https://dpharness.com/plugin/Fanqi89/dsh-rea> | SVG 文本 `dsh install` + `L4 passed` |
+  | Awesome REA | `img.shields.io/badge/Featured%20in-Awesome%20REA-f0b429` | <https://github.com/AIshihzong/awesome-reverse-engineer-anything> | 由 issue #1 提供，200 且文本为 `Featured in` / `Awesome REA` |
+
+- README 新增「收录情况」小节，说明三个站点、徽章是实时数据（版本 / 收藏数 / 验证等级会随对方扫描更新）。
+
+### 变更
+
+- `package.json` / `dsh.plugin.json` 版本 `1.4.0` → `1.4.1`。**补丁、启动器、脚本与 v1.4.0 逐字节一致**，
+  已装 v1.4.0 的用户不必为功能升级。
+
+### 未采纳（附理由）
+
+- **`dsh.so` 的徽章没有加**：`https://cdn.dsh.so/badge/dsh-rea.svg` 确实 200（文本 `dsh.so` / `risk low`），
+  但它的落地页 <https://www.dsh.so/artifact/dsh-rea/> 讲的是**同名 fork `zhaofeng130/dsh-rea`**——
+  页面里的安装命令是 `dsh plugin --profile web add github:zhaofeng130/dsh-rea#v0.1.0`，
+  安装验证徽章也只 pin 了该 fork 在 0.2.1-rc.2 / rc.3 / rc.5 / 0.2.2-rc.1 的安装记录。
+  dsh.so 按**插件名**建条目、不按 `owner/name` 区分，所以这个徽章会把读者导到别人的仓库页面。
+  等 dsh.so 按 `owner/name` 收录本仓库（或页面改用本仓库的安装命令）再加，不加假归属。
+  dpharness.com 的条目是**按 `Fanqi89/dsh-rea` 建的**（页面安装命令逐字来自本仓库 README），所以它可以用。
+
+### Issue #1（Awesome REA）
+
+- 条目原文：`[Fanqi89/dsh-rea](…) - Config-only DeepSeek Harness bundle that mounts REA's MCP server, with
+  setup scripts for Windows, macOS, Linux and WSL and a per-version compatibility audit. MIT.`
+- 逐项核对：config-only bundle ✅、Windows/macOS/Linux/WSL setup 脚本 ✅
+  （`setup-rea-tools.ps1` / `setup-rea-tools.sh` / `setup-wsl-linux-toolchain.ps1`）、
+  per-version 兼容性审计 ✅（`docs/COMPAT-VERSIONS.md`，0.2.1-rc.2 → 0.2.2-rc.1）、MIT ✅。
+  描述准确、无需更正；已回复作者（说明当前版本与徽章已加）并**按 completed 关闭**。
+
+### 验证
+
+- 4 个徽章/页面 URL 逐个 `curl --ssl-no-revoke`：dshopen badge JSON 200 / 7502 B、dshopen 页面 200 / 21810 B、
+  dpharness badge 200 / 943 B、dpharness 页面 200 / 237264 B；shields 两个端点 200 并从 SVG 里读出预期文本。
+- `icon.svg` 与 dshopen 市场图标逐字节比对相同（716 B）。
+- JSON 校验：`package.json` / `dsh.plugin.json` / `locale/*.json` 全部可解析且无 BOM。
+
+### 状态
+
+- 运行时零改动（`cordis.patch.yml` 未变）。本版只是「让仓库和收录页面对得上」。
+
+---
+
 ## v1.4.0 — 2026-11-07
 
 **主题：把「装完就能用」做成跨 DSH 版本、跨平台的可靠启动链（Windows 桌面版 / 无头 CLI，macOS / Linux）。**

@@ -1,4 +1,14 @@
+<p align="center">
+  <img src="icon.svg" alt="dsh-rea 图标：REA 逆向桥" width="96" height="96">
+</p>
+
 # dsh-rea
+
+<p align="center">
+  <a href="https://dshopen.org/zh/plugins/dsh-rea/"><img alt="开放插件市场 · 已收录" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fdshopen.org%2Fbadge%2Fdsh-rea.json"></a>
+  <a href="https://dpharness.com/plugin/Fanqi89/dsh-rea"><img alt="dsh install · 安装验证" src="https://dpharness.com/badge/install/Fanqi89/dsh-rea.svg"></a>
+  <a href="https://github.com/AIshihzong/awesome-reverse-engineer-anything"><img alt="Featured in Awesome REA" src="https://img.shields.io/badge/Featured%20in-Awesome%20REA-f0b429"></a>
+</p>
 
 **REA（Reverse Engineer Anything）→ DeepSeek Harness 插件** · https://github.com/morluto/rea
 
@@ -12,6 +22,12 @@ mcp__rea__<tool_name>
 ```
 
 的形式注册给模型，配合已安装的 `reverse-engineer-anything` 技能即可开展逆向调查。
+
+> **收录情况**：本插件已收录于 [开放插件市场 dshopen.org](https://dshopen.org/zh/plugins/dsh-rea/)
+> （站点标注 `已审查`，并显示收藏数）、[dpharness.com](https://dpharness.com/plugin/Fanqi89/dsh-rea)
+> （安装验证 L4 passed）与 [Awesome REA](https://github.com/AIshihzong/awesome-reverse-engineer-anything)
+> 的「Plugins and integrations」条目。徽章显示各站点的实时数据（版本、收藏数、验证等级会随扫描更新），
+> 点进去就是对应页面。
 
 > **合规提示**：REA 仅用于你拥有或已获授权分析的软件（研究、教育、互操作性、软件保存）。
 > 使用前请阅读上游 [DISCLAIMER.md](https://github.com/morluto/rea/blob/main/DISCLAIMER.md)。
@@ -208,7 +224,12 @@ Harness 关闭时 Windows 用 `taskkill /T /F`、POSIX 用进程组 `SIGTERM`（
 
 完整的「每个版本做了什么、修了什么、怎么验证」见 **[CHANGELOG.md](CHANGELOG.md)**；摘要：
 
-- **v1.4.0**（当前）：跨版本 / 跨平台稳定性版本——
+- **v1.4.1**（当前）：文档层小版本——README 顶部加上仓库图标 `icon.svg`（96×96）、三个
+  **收录徽章**（开放插件市场 dshopen.org 的「已收录 · ♥ N」实时徽章、dpharness.com 的安装验证徽章、
+  Awesome REA 的 Featured 徽章，逐个 curl 验过 200 且链接指向对应页面）、新增「收录情况」小节；
+  处理 issue #1（Awesome REA 条目核对无误，已回复并关闭）。**运行时与 v1.4.0 完全一致**
+  （补丁 / 启动器 / 脚本逐字节相同），只是版本号与文档更新。
+- **v1.4.0**：跨版本 / 跨平台稳定性版本——
   ① 启动器改为 `command: !!js process.execPath` + `ELECTRON_RUN_AS_NODE=1`，用 Harness 自带 Node，
   不再依赖 PATH 上的 `node`/`npx`（修 macOS Finder 启动、Windows 无 Node、PATH 上是 Node 18/20 三种静默失败）；
   ② 三层入口解析（`$REA_MCP_ENTRY` → `~/.rea/dsh` 本地固定安装 → `npx` 兜底），本地层离线可用、启动从
@@ -233,10 +254,11 @@ Harness 关闭时 Windows 用 `taskkill /T /F`、POSIX 用进程组 `SIGTERM`（
 - **v1.0.1**：单行 + Node 启动器；修复旧构建下第二条平台行显示「异常」的问题。
 - **v1.0.0**：双行 + `disabled: !!js`（在较旧 Harness 上可能出现 1 运行中 / 1 异常）。
 
-六个标签可共存、互不冲突；任意版本都能按标签锁装：
+七个标签可共存、互不冲突；任意版本都能按标签锁装：
 
 ```powershell
-dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.4.0   # 最新（跨版本/跨平台稳定性）
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.4.1   # 最新（文档/徽章；运行时同 v1.4.0）
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.4.0   # 跨版本/跨平台稳定性
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.3.0   # Linux 路线（WSL 2）
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.2.0   # DSH 适配层（0.2.0-rc.2 可用）
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.1.0   # 能力层文档
