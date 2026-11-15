@@ -2,3 +2,6 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
+
+# Scratch files used while composing commit/tag/PR messages; never ship them.
+.git-*.tmp

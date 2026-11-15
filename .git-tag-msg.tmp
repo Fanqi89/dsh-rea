@@ -1,6 +1,0 @@
-v1.4.1 - listing badges, README icon, issue #1
-
-- README icon (icon.svg) + 3 verified listing badges (dshopen / dpharness / Awesome REA)
-- README 收录情况 section; why the dsh.so badge is not used (fork-name collision)
-- issue #1 (Awesome REA): entry verified accurate, replied and closed
-- no runtime change: patch/launcher/scripts identical to v1.4.0
