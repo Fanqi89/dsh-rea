@@ -29,6 +29,12 @@ dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.1.0
 
 - README 新增「收录情况」小节，说明三个站点、徽章是实时数据（版本 / 收藏数 / 验证等级会随对方扫描更新）。
 
+> 维护注记（发布后补充，写在 main 上，v1.4.1 的标签树里没有这段）：打 v1.4.1 标签的那次提交
+> 误把两个本地草稿文件 `.git-commit-msg.tmp` / `.git-tag-msg.tmp` 一起提交进了标签树；按「标签不移动」
+> 纪律不改标签，改在后续提交 `e2127f5` 里从 main 移除并把 `.git-*.tmp` 加进 `.gitignore`。
+> 它们**不会**进入安装包：`package.json` 的 `files` 是白名单，`npm pack` 实测只打 9 个文件；
+> 只是 `github:…#v1.4.1` 的源码 tarball 里会多这两个 1 KB 文本文件。
+
 ### 变更
 
 - `package.json` / `dsh.plugin.json` 版本 `1.4.0` → `1.4.1`。**补丁、启动器、脚本与 v1.4.0 逐字节一致**，
