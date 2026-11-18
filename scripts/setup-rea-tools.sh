@@ -60,6 +60,7 @@ SKIP_JADX=0
 SKIP_ADB=0
 SKIP_APKTOOL=0
 SKIP_AGENTS=0
+WITH_TOGGLE=0
 TOOLS_ROOT="${REA_TOOLS_ROOT:-$HOME/.rea/tools}"
 APKTOOL_JAR_OPT=""
 
@@ -134,6 +135,9 @@ OPTIONS
   --skip-apktool       Do not write the apktool wrapper.
   --skip-agents        Do not provision the pinned REA MCP install (layer 2);
                        the launcher then falls back to npx.
+  --with-toggle        Run 8b: append an id-targeted `rea-mcp` override to the
+                       profile patch so phoushen/dsh-rea-toggle can switch REA
+                       on/off from the composer (idempotent, keeps a .bak).
   -h, --help           Show this help.
 
 WHAT IT DOES (in order)
@@ -145,6 +149,8 @@ WHAT IT DOES (in order)
   6. apktool: write an executable POSIX wrapper for REA_APKTOOL_COMMAND.
   7. Chrome / Chromium detection for the browser lane.
   8. Pinned REA MCP install (npm --prefix ~/.rea/dsh/agents/6.7.0).
+  8b. Optional (--with-toggle): wire the composer REA on/off switch by adding an
+      id-targeted `rea-mcp` override to the profile patch (see docs/TOGGLE.md).
   9. Summary: copy-pasteable exports, how to make them reach DSH, and the
      JSON-RPC probe that proves the server is reachable.
 
@@ -397,6 +403,7 @@ while [ $# -gt 0 ]; do
     --skip-adb) SKIP_ADB=1 ;;
     --skip-apktool) SKIP_APKTOOL=1 ;;
     --skip-agents) SKIP_AGENTS=1 ;;
+    --with-toggle) WITH_TOGGLE=1 ;;
     --tools-root)
       if [ $# -lt 2 ]; then die "--tools-root needs a directory"; fi
       TOOLS_ROOT="$2"
@@ -972,6 +979,48 @@ else
       HARD_FAIL=1
     fi
   fi
+fi
+
+# ---------------------------------------------- 8b. GUI switch (optional) ---
+# phoushen/dsh-rea-toggle puts an ON/OFF chip in the composer and rewrites the
+# `disabled` flag of the row with id=rea-mcp in the USER patch layer. dsh-rea
+# inserts that row from its BUNDLE layer, so the user patch needs an id-targeted
+# override before the switch can find it. See docs/TOGGLE.md.
+if [ "$WITH_TOGGLE" -eq 1 ]; then
+  step "8b GUI switch (dsh-rea-toggle), optional"
+  TOGGLE_DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
+  TOGGLE_PROFILE="${DSH_PROFILE:-desktop}"
+  TOGGLE_PROFILE_DIR="$TOGGLE_DSH_HOME/profiles/$TOGGLE_PROFILE"
+  TOGGLE_PATCH="$TOGGLE_PROFILE_DIR/cordis.patch.yml"
+  if [ -d "$TOGGLE_PROFILE_DIR/node_modules/dsh-rea-toggle" ]; then
+    log_ok "toggle plugin installed (profile: $TOGGLE_PROFILE)"
+  else
+    log_warn "toggle plugin not installed for profile $TOGGLE_PROFILE"
+    log_hint "dsh plugin --profile $(dq "$TOGGLE_PROFILE") add github:phoushen/dsh-rea-toggle"
+  fi
+  if [ ! -f "$TOGGLE_PATCH" ]; then
+    log_warn "profile patch not found: $TOGGLE_PATCH (has this profile ever started?)"
+  elif grep -Eq '^[[:space:]]*-[[:space:]]*id:[[:space:]]*rea-mcp[[:space:]]*$' "$TOGGLE_PATCH"; then
+    log_ok "rea-mcp override already present: $TOGGLE_PATCH"
+  elif [ "$DRY_RUN" -eq 1 ]; then
+    log_info "would append the rea-mcp override row to $TOGGLE_PATCH"
+  else
+    TOGGLE_BACKUP="$TOGGLE_PATCH.dsh-rea-toggle.bak"
+    cp "$TOGGLE_PATCH" "$TOGGLE_BACKUP"
+    {
+      printf '\n# --- dsh-rea GUI switch (dsh-rea-toggle) ------------------------------------\n'
+      printf '# dsh-rea inserts the rea-mcp row from its BUNDLE layer; the switch only\n'
+      printf '# rewrites `disabled` inside this user patch layer, so the row needs an\n'
+      printf '# id-targeted override here. Delete this block to unhook the switch.\n'
+      printf -- '- id: rea-mcp\n  disabled: false\n'
+    } >> "$TOGGLE_PATCH"
+    if grep -Eq '^[[:space:]]*-[[:space:]]*id:[[:space:]]*rea-mcp[[:space:]]*$' "$TOGGLE_PATCH"; then
+      log_ok "appended the rea-mcp override (backup: $TOGGLE_BACKUP)"
+    else
+      log_warn "append did not land as expected; the original is saved at $TOGGLE_BACKUP"
+    fi
+  fi
+  log_info "the flag is written immediately; the tool set changes on the next Harness start"
 fi
 
 # ------------------------------------------------------- 9. summary -------

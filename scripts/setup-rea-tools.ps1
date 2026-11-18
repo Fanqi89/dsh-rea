@@ -8,6 +8,8 @@
     1. 检查 Node.js / npx
     1b. 把 rea-agents 固定安装到 %USERPROFILE%\.rea\dsh\agents\<版本>（插件 launcher 优先用它：
         离线、无需 npm/npx、冷启动更快；失败时插件仍会退回 npx 路径）
+    1c. 可选（-WithToggle）：给 dsh-rea-toggle 装上“抓手”——在 profile patch 里写一个
+        id=rea-mcp 的覆盖条目，让输入框下方的 REA ON/OFF 开关能找到要翻的 disabled 标志
     2. 找到或指定可用的 JDK 21+（Ghidra 需要完整 JDK：java + javac）
     3. 下载并校验、解压 Ghidra 12.1.4，写入 GHIDRA_INSTALL_DIR
     4. 检测 Chrome / Edge，写入 REA_BROWSER_EXECUTABLE
@@ -28,6 +30,12 @@
 .PARAMETER SkipAgents
   跳过 1b 步：不把 rea-agents 固定安装到 %USERPROFILE%\.rea\dsh（插件会退回 npx 路径）。
 
+.PARAMETER WithToggle
+  跑 1c 步：给图形开关 phoushen/dsh-rea-toggle 补上 id=rea-mcp 的覆盖条目（幂等，会备份
+  cordis.patch.yml）。开关插件本身要另外装：
+    dsh plugin --profile "<profile>" add github:phoushen/dsh-rea-toggle
+  细节见 docs/TOGGLE.md。
+
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-rea-tools.ps1 -DryRun
 
@@ -45,6 +53,7 @@ param(
   [switch]$WithApktool,
   [switch]$SkipSkill,
   [switch]$SkipAgents,
+  [switch]$WithToggle,
   [switch]$DryRun
 )
 
@@ -201,6 +210,56 @@ if ($SkipAgents) {
   } else {
     $tail = ($out.Trim() -split "`n" | Select-Object -Last 4) -join ' | '
     Write-Warn2 "安装完成但没有入口文件；插件将退回 npx 路径。尾部输出：$tail"
+  }
+}
+
+# -------------------------------------------- 1c. 图形开关（可选，dsh-rea-toggle）
+# 上游插件 phoushen/dsh-rea-toggle 在输入框下方加 REA ON/OFF 开关，翻的是 profile patch 里
+# id=rea-mcp 那一行的 disabled。dsh-rea 的 rea-mcp 行来自 bundle 层，开关只读用户 patch 层，
+# 所以要在 profile patch 里放一个「按 id 覆盖」的条目，开关才找得到目标。
+# 详见 docs/TOGGLE.md。
+if ($WithToggle) {
+  Write-Step '图形开关 dsh-rea-toggle（REA ON/OFF）'
+  $dshHome = $env:DSH_HOME
+  if (-not $dshHome) { $dshHome = Join-Path $env:USERPROFILE '.dsh' }
+  $profName = $env:DSH_PROFILE
+  if (-not $profName) { $profName = 'desktop' }
+  $profDir = Join-Path (Join-Path $dshHome 'profiles') $profName
+  $patchFile = Join-Path $profDir 'cordis.patch.yml'
+  if (Test-Path -LiteralPath (Join-Path $profDir 'node_modules\dsh-rea-toggle')) {
+    Write-Ok "开关插件已安装（profile：$profName）"
+  } else {
+    Write-Warn2 "开关插件未安装。先装：dsh plugin --profile `"$profName`" add github:phoushen/dsh-rea-toggle"
+  }
+  if (-not (Test-Path -LiteralPath $patchFile)) {
+    Write-Warn2 "profile patch 不存在：$patchFile（该 profile 还没启动过？）"
+  } else {
+    $text = [IO.File]::ReadAllText($patchFile, [Text.Encoding]::UTF8)
+    if ($text -match '(?m)^\s*-\s*id:\s*rea-mcp\s*$') {
+      Write-Ok "patch 里已有 rea-mcp 覆盖行：$patchFile"
+    } elseif ($DryRun) {
+      Write-Info "would append the rea-mcp override row to $patchFile"
+    } else {
+      $nl = "`n"
+      $block = $nl +
+        '# --- dsh-rea GUI switch (dsh-rea-toggle) ------------------------------------' + $nl +
+        '# dsh-rea inserts the rea-mcp row from its BUNDLE layer; the switch only' + $nl +
+        '# rewrites `disabled` inside this user patch layer, so the row needs an' + $nl +
+        '# id-targeted override here. Delete this block to unhook the switch.' + $nl +
+        '- id: rea-mcp' + $nl + '  disabled: false' + $nl
+      $head = $text
+      if (-not $head.EndsWith("`n")) { $head += $nl }
+      $backup = $patchFile + '.dsh-rea-toggle.bak'
+      Copy-Item -LiteralPath $patchFile -Destination $backup -Force
+      [IO.File]::WriteAllText($patchFile, ($head + $block), (New-Object Text.UTF8Encoding($false)))
+      $check = [IO.File]::ReadAllText($patchFile, [Text.Encoding]::UTF8)
+      if ($check -match '(?m)^\s*-\s*id:\s*rea-mcp\s*$') {
+        Write-Ok "已追加 rea-mcp 覆盖行（备份：$backup）"
+      } else {
+        Write-Warn2 "追加后仍找不到 rea-mcp 覆盖行；原文件备份在 $backup"
+      }
+    }
+    Write-Info '开关立刻写盘，工具集合在下次启动才变；完全退出 Harness 后重开'
   }
 }
 

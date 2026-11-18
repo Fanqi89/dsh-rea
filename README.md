@@ -99,6 +99,37 @@ dsh plugin --profile "$env:DSH_PROFILE" add "X:\path\to\dsh-rea"
 `install_bundle` 会自动完成 profile 的 `package.json` / `cordis.patch.yml` 修改与依赖安装，
 **不要**手工编辑 profile 文件。装完后重载/重启 Harness 使工具生效。
 
+## 图形开关（可选，推荐）：配合 `dsh-rea-toggle`
+
+REA 的 207 个工具在**每一轮请求**里都要带 schema。实测（rea-agents 6.7.0、默认 compact）：
+工具名 + 描述 **96,343 字符 ≈ 2.75 万 token**，inputSchema 另 **85,705 B ≈ 2.4 万 token** ——
+做逆向时这笔开销很值，写脚本、聊天时就是死重。
+
+[`phoushen/dsh-rea-toggle`](https://github.com/phoushen/dsh-rea-toggle)（MIT，独立插件）在输入框
+下方加一枚 `REA ON / REA OFF` 开关，翻的就是我们这行 `rea-mcp` 的 `disabled` 标志：
+
+```powershell
+# 1) 装开关插件
+dsh plugin --profile "$env:DSH_PROFILE" add github:phoushen/dsh-rea-toggle
+
+# 2) 给开关一个抓手：它只改写 profile patch，而 rea-mcp 这一行是 dsh-rea 的 bundle 层插入的，
+#    所以要在 <DSH_HOME>/profiles/<profile>/cordis.patch.yml 里放一个按 id 覆盖的条目
+#    （下面这条等价于跑 scripts/setup-rea-tools.ps1 -WithToggle / setup-rea-tools.sh --with-toggle）
+# - id: rea-mcp
+#   disabled: false
+
+# 3) 完全退出 DeepSeek Harness（含托盘）再开 —— 客户端 chunk 只在启动时扫描
+```
+
+开关**立刻写盘**，工具集合在**下次启动**才变（关了就是 0 个工具、0 开销）。细节、端点、排错与
+撤销方法见 **[docs/TOGGLE.md](docs/TOGGLE.md)**。
+
+> 为什么需要第 2 步：开关的实现只读 `<DSH_HOME>/profiles/<profile>/cordis.patch.yml`，
+> 找不到 `- id: rea-mcp` 就显示 `REA ?`。这是上游插件的设计（它假设 REA 行写在 profile patch 里），
+> 我们不改它的代码，只补上这行覆盖；删掉这行即"解除开关"，REA 恢复为常开。
+> 另外它按 `DSH_PROFILE` 找 profile（未设时默认 `desktop`）——profile 不叫 `desktop` 时请设该变量。
+
+
 ## 反编译能力全览
 
 装好外部依赖后，这套组合可以覆盖「从网页到二进制、从 APK 到固件」的全部静态 / 被动运行时分析。
@@ -225,7 +256,12 @@ Harness 关闭时 Windows 用 `taskkill /T /F`、POSIX 用进程组 `SIGTERM`（
 
 完整的「每个版本做了什么、修了什么、怎么验证」见 **[CHANGELOG.md](CHANGELOG.md)**；摘要：
 
-- **v1.5.0**（当前）：上游 REA 跟进到 **rea-agents 6.7.0**（工具 **170 → 207 个**，+37，无删除）——
+- **v1.5.1**（当前）：接入图形开关 [`phoushen/dsh-rea-toggle`](https://github.com/phoushen/dsh-rea-toggle)
+  （MIT，独立插件）——输入框下方一枚 `REA ON/OFF`，关掉就是 0 个工具、不再付每轮约 5 万 token 的
+  工具面开销。dsh-rea 这边补上它缺的那一环：`rea-mcp` 行来自 bundle 层，开关只改用户 patch 层，
+  所以要有 `- id: rea-mcp` 覆盖条目（新增 `-WithToggle` / `--with-toggle` 一键写、会备份并回读校验）。
+  新增 [docs/TOGGLE.md](docs/TOGGLE.md)。**不含上游代码**，运行时与 v1.5.0 一致。
+- **v1.5.0**：上游 REA 跟进到 **rea-agents 6.7.0**（工具 **170 → 207 个**，+37，无删除）——
   新增动态分析线（Frida 10 个工具、GDB 4 个、rizin/cutter 6 个）与一批静态检查器
   （Go / Rust / WASM / SQLite / PCAP & 抓包 / 信号解码 / Dart AOT & Flutter / Harmony 应用图 /
   Electron hardened fuses / objdump / `search_bytes` / `compare_wasm_interfaces`）。
@@ -263,10 +299,11 @@ Harness 关闭时 Windows 用 `taskkill /T /F`、POSIX 用进程组 `SIGTERM`（
 - **v1.0.1**：单行 + Node 启动器；修复旧构建下第二条平台行显示「异常」的问题。
 - **v1.0.0**：双行 + `disabled: !!js`（在较旧 Harness 上可能出现 1 运行中 / 1 异常）。
 
-八个标签可共存、互不冲突；任意版本都能按标签锁装：
+九个标签可共存、互不冲突；任意版本都能按标签锁装：
 
 ```powershell
-dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.5.0   # 最新（REA 6.7.0，207 工具）
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.5.1   # 最新（图形开关接线 + 文档）
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.5.0   # REA 6.7.0，207 工具
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.4.1   # 文档/徽章；运行时同 v1.4.0（REA 6.4.0，170 工具）
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.4.0   # 跨版本/跨平台稳定性
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.3.0   # Linux 路线（WSL 2）

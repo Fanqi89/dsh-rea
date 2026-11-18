@@ -51,6 +51,9 @@ Test-Path "$env:USERPROFILE\.rea\dsh\agents\6.7.0\node_modules\rea-agents\script
 装好后启动不再需要网络与 npm/npx，冷启动也从 ~16.8 s 降到 ~5–7 s。命中哪一层写进
 `%USERPROFILE%\.rea\dsh\launcher.log`。卸载：`Remove-Item -Recurse "$env:USERPROFILE\.rea\dsh"`。
 
+> **图形开关（可选）**：想给 REA 一个 ON/OFF 按钮，装 [`phoushen/dsh-rea-toggle`](https://github.com/phoushen/dsh-rea-toggle)
+> 再用本脚本的 `-WithToggle` 写 profile 覆盖行；完整步骤与本机实测见 [TOGGLE.md](TOGGLE.md)。
+
 > **版本上限（6.8.0+ 需要更新的 Node）**：REA 6.7.0 的 `engines.node` 是 `^22.19.0 || ^24.11.0 || >=26.0.0`，
 > Harness 自带的 Node 24.21.0 满足，所以本插件钉 **6.7.0**。REA **6.8.0 起**改成
 > `^22.23.4 || ^24.22.1 || >=26.12.1`，24.21.0 会被直接拒绝启动

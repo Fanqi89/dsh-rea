@@ -9,6 +9,74 @@ dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.1.0
 
 ---
 
+## v1.5.1 — 2026-11-18
+
+**主题：接入图形开关 —— 让 [`phoushen/dsh-rea-toggle`](https://github.com/phoushen/dsh-rea-toggle)
+能在输入框下方一键开关 REA 的 207 个工具（接线 + 文档 + 脚本，不改 REA 运行方式）。**
+
+### 为什么值得关
+
+REA 的工具定义属于**每次请求**的系统提示。本机实测（rea-agents 6.7.0、默认 compact）：
+
+| 测量项 | 数值 | 粗估 token（÷3.5） |
+|---|---|---|
+| 工具数 | 207 | — |
+| 工具名 + 描述（与上游同口径：`name`+`description` 字符数） | 96,343 字符 | ≈ 2.75 万 |
+| inputSchema 合计（compact / full） | 85,705 B / 667,642 B | ≈ 2.4 万 / 19 万 |
+| `instructions` | 952 B | ≈ 270 |
+
+关掉 = 0；打开 = 上面这些。上游 README 的 229 / 14 万字符 / 4 万 token 是按 `rea-agents@6.8.0` 量的
+（本插件钉 6.7.0，见 v1.5.0 说明），所以本仓库用 207 的口径。
+
+### 新增
+
+- **`docs/TOGGLE.md`**：开关与 dsh-rea 的接线、端点、生效时机、验证方法、排错表、撤销步骤、
+  它做不到什么（不是工具过滤器 / 不是热切换）、归属声明。
+- **README「图形开关（可选，推荐）」**：三步接线 + 成本数字 + 为什么需要 profile 覆盖行。
+- **`scripts/setup-rea-tools.ps1 -WithToggle` / `setup-rea-tools.sh --with-toggle`**：
+  幂等追加 `- id: rea-mcp` + `disabled: false` 这条**按 id 覆盖**到
+  `<DSH_HOME>/profiles/<profile>/cordis.patch.yml`；先备份（`.dsh-rea-toggle.bak`），
+  写完回读校验，并检查开关插件是否已装（没装就打印安装命令）。
+- `cordis.patch.yml` 头部注释补充这段关系（为什么开关需要 profile 覆盖行、没覆盖时开关显示 `REA ?`）。
+
+### 为什么需要那条覆盖行（本版最关键的一点）
+
+开关插件的实现只读 `<DSH_HOME>/profiles/<profile>/cordis.patch.yml`，把目标行里的
+`disabled:` 改成 `true`/`false`；而 **dsh-rea 的 `rea-mcp` 行是 bundle 层插入的**，不在用户 patch 层。
+所以要在用户 patch 里放一个**按 id 覆盖**（不是 `insert`）的条目：
+
+```yaml
+- id: rea-mcp
+  disabled: false
+```
+
+删掉这段就"解除开关"，REA 恢复常开。另外它按 `DSH_PROFILE` 找 profile（未设时默认 `desktop`）——
+profile 不叫 `desktop` 时要设这个变量。
+
+### 验证（2026-11-18，Windows + DSH 0.2.1-rc.5 + rea-agents 6.7.0）
+
+- **隔离探针 profile**（`dsh-rea` + `dsh-rea-toggle` + 覆盖行）：
+  `GET /rea-toggle/status` → `{"ok":true,"rowLine":4,"enabled":true}`；
+  `POST /set {"enabled":false}` → 文件 `disabled: true`；
+  **重启探针** → `launcher.log` 行数 73→73、无新 REA 进程（真的没启动）；
+  `POST set true` → 重启 → 73→75、新 REA 进程出现。即"关"确实省下 207 个工具。
+- **真实 desktop profile**：插件已装（`dependencies` + `bundles`），覆盖行落在 patch 第 101 行；
+  `status` → `enabled:true`；`set false` → 文件 `disabled: true`；`set true` → 还原；
+  跨域写（`Origin: https://evil.example`）→ **403**；
+  客户端槽位 `conversation.composer.dock` 的 occupant 里出现 `dsh-rea-toggle`（order 90，active）。
+- 脚本：`.ps1` PowerShell 5.1 解析 0 错误（BOM 保留）、`-DryRun -WithToggle` 正确报告"已装/已有覆盖行"；
+  `.sh` 通过 `bash -n`，`--dry-run --with-toggle` 同样正确；`cordis.patch.yml` 折叠往返 1,900 B 一致、
+  schema 校验 OK。
+
+### 说明
+
+- 本版**不包含上游插件的代码**（MIT，作者 phoushen）：dsh-rea 仍是 configuration-only bundle，
+  只增加文档、脚本与一段注释。
+- 工具集合在**下次启动**才变（MCP server 无法运行时注销自己，`dsh-mcp-client` 也没有工具过滤字段）。
+- 装开关前请确认 profile 名（`DSH_PROFILE`）；profile 不叫 `desktop` 时开关默认会找错文件。
+
+---
+
 ## v1.5.0 — 2026-11-18
 
 **主题：跟上上游 REA —— rea-agents `6.4.0 → 6.7.0`，工具 **170 → 207**（+37，无删除）。**
