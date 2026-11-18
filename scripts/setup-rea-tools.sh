@@ -5,9 +5,9 @@
 # The REA MCP server itself is started by the tiny Node launcher inside
 # cordis.patch.yml, which resolves the server entry in this order:
 #   1. $REA_MCP_ENTRY                     (only if you set it yourself)
-#   2. $HOME/.rea/dsh/agents/6.4.0/node_modules/rea-agents/scripts/rea.mjs
+#   2. $HOME/.rea/dsh/agents/6.7.0/node_modules/rea-agents/scripts/rea.mjs
 #                                         (pinned local install - step 8 here)
-#   3. npx -y rea-agents@6.4.0 mcp        (network fallback, not provisioned)
+#   3. npx -y rea-agents@6.7.0 mcp        (network fallback, not provisioned)
 # Layer 2 is spawned with the Node bundled with DSH, so it needs no npx, no
 # network and no dependency on the user's Node on PATH at launch time.
 #
@@ -35,7 +35,7 @@
 
 set -euo pipefail
 
-REA_VERSION="6.4.0"
+REA_VERSION="6.7.0"
 REA_PKG="rea-agents@${REA_VERSION}"
 
 # Release asset names verified live on 2026-11-07 (see docs/SETUP-POSIX.md):
@@ -144,7 +144,7 @@ WHAT IT DOES (in order)
   5. adb (Android platform-tools) detection.
   6. apktool: write an executable POSIX wrapper for REA_APKTOOL_COMMAND.
   7. Chrome / Chromium detection for the browser lane.
-  8. Pinned REA MCP install (npm --prefix ~/.rea/dsh/agents/6.4.0).
+  8. Pinned REA MCP install (npm --prefix ~/.rea/dsh/agents/6.7.0).
   9. Summary: copy-pasteable exports, how to make them reach DSH, and the
      JSON-RPC probe that proves the server is reachable.
 

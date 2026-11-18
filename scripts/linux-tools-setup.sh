@@ -36,7 +36,7 @@ for pkg in pwntools binwalk unblob mitmproxy; do
 done
 
 echo "== REA (rea-agents) for the Linux MCP instance =="
-npm install -g "rea-agents@6.4.0" || echo "WARN: rea-agents global install failed"
+npm install -g "rea-agents@6.7.0" || echo "WARN: rea-agents global install failed"
 
 echo "== versions =="
 {

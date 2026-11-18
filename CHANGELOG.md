@@ -9,6 +9,97 @@ dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.1.0
 
 ---
 
+## v1.5.0 — 2026-11-18
+
+**主题：跟上上游 REA —— rea-agents `6.4.0 → 6.7.0`，工具 **170 → 207**（+37，无删除）。**
+
+### 上游检查结果（本次更新的依据）
+
+| rea-agents | 发布 | `engines.node` | 工具数（本机实测） |
+|---|---|---|---|
+| 6.4.0（v1.4.x 钉的） | 2026-10-11 | `^22.19.0 \|\| ^24.11.0 \|\| >=26.0.0` | 170 |
+| 6.5.0 | 2026-10-14 | 同上 | 未测 |
+| **6.7.0（本版钉的）** | 2026-10-18 | 同上 | **207** |
+| 6.8.0 | 2026-10-25 | **`^22.23.4 \|\| ^24.22.1 \|\| >=26.12.1`** | 被 Node 门禁挡住 |
+| 6.9.0（上游 latest） | 2026-11-12 | 同上 | 被 Node 门禁挡住 |
+
+**为什么不直接上 6.9.0**：6.8.0 起把 Node 下限抬到 `^24.22.1`，而 DSH 桌面版运行时是 Electron 44.7.0 as
+**Node 24.21.0**（`resources/runtime/primary-runtime/dependencies/node/bin/node.exe` 也是 24.21.0），
+本机 PATH 上的 node 是 24.19.0。实测把 6.9.0 装上后用 DSH 的 Node 启动，REA 在启动早期就硬拒绝：
+
+```
+REA requires Node.js 22.x (>=22.23.4), 24.x (>=24.22.1), 26.12.1+;
+this process runs Node.js 24.21.0. Install a supported release, then retry.
+```
+
+所以钉**能跑的最新版 6.7.0**，同时给启动器加 `REA_MCP_NODE` 逃生口：有 ≥24.22.1 的 Node 时，
+指向它 + `REA_MCP_VERSION=6.9.0` 即可跑上游最新版。
+
+### 新增（6.4.0 → 6.7.0 的 37 个工具，无删除）
+
+- **动态分析（Frida，9 个）**：`list_frida_devices`、`list_frida_processes`、`start_frida_session`、
+  `instrument_with_frida`、`load_frida_script`、`unload_frida_script`、`resume_frida_session`、
+  `frida_session_status`、`close_frida_session`
+- **调试器（11 个）**：GDB 4 个（`start_gdb_session`、`gdb_console`、`gdb_session_status`、`close_gdb_session`）、
+  rizin/Cutter 7 个（`start_rizin_debug_session`、`rizin_debug_command`、`rizin_debug_session_status`、
+  `close_rizin_debug_session`、`execute_rizin_command`、`cutter_command`、`list_cutter_sessions`）
+- **静态检查器（17 个）**：`inspect_go_binary`、`inspect_rust_binary`、`inspect_wasm_artifact`、
+  `compare_wasm_interfaces`、`inspect_sqlite_database`、`inspect_pcap_capture`、`inspect_pcap_client`、
+  `inspect_packet_capture`、`inspect_packet_fields`、`inspect_signal_decoders`、`decode_signal_recording`、
+  `inspect_dart_aot`、`identify_flutter_build`、`inspect_electron_fuses`、
+  `project_harmony_application_graph`、`search_bytes`、`inspect_with_objdump`
+
+> 本机只验证了这些工具在 `tools/list` 里存在（以及总数 207），**没有逐项跑通**；
+> Frida / GDB / rizin 需要目标侧或本机安装对应调试器。
+
+### 变更
+
+- `cordis.patch.yml`：启动器默认版本 `6.4.0 → 6.7.0`（1,858 → 1,900 B），新增 `REA_MCP_NODE`
+  （第 2 层用哪个 node），`rea-linux` 行的 `npx … rea-agents@` 同步到 6.7.0；注释同步真实测量值。
+- 三个配置脚本的固定安装版本同步：`scripts/setup-rea-tools.ps1`（`$ReaVersion`）、
+  `scripts/setup-rea-tools.sh`（`REA_VERSION`）、`scripts/linux-tools-setup.sh`（全局 `npm i -g`）、
+  `scripts/setup-wsl-linux-toolchain.ps1`（提示文案里的 6.4.0 / 170）。
+- `package.json` / `dsh.plugin.json` 版本 `1.4.1 → 1.5.0`，描述里的工具数 170 → 207。
+- 文档：README（环境要求 / 验证 / 配置项表新增 `REA_MCP_NODE` / 版本历史 / 标签列表）、
+  `docs/CAPABILITIES.md`（新增「2.1 6.7.0 新增的 37 个工具」小节 + 2026-11-18 实测行）、
+  `docs/SETUP.md`、`docs/SETUP-POSIX.md`（版本钉扎 + 6.8+ Node 门槛说明）、
+  `docs/COMPAT-VERSIONS.md` 新增第 8 节记录这次升级与原因。
+
+### token 影响（实测，Electron as Node 24.21.0）
+
+| 指标 | 6.4.0 | 6.7.0 |
+|---|---|---|
+| `tools/list` 数量 | 170 | **207** |
+| `instructions` | 304 B | 952 B |
+| inputSchema 合计（compact，默认） | 183,725 B | **85,705 B**（反而变小） |
+| inputSchema 合计（full） | 365,646 B | 667,642 B |
+| 工具描述合计 | 58,597 B | 92,270 B |
+| `tools/list` 全量 JSON | 1,772,762 B | 2,576,421 B |
+
+即：**默认的 compact 档位下，工具多了 22%，模型可见的 inputSchema 反而少了 53%**；想换完整 schema 才明显变贵。
+
+### 验证
+
+- **真实补丁行端到端**（`probe-row.mjs` 解析 cordis.patch.yml → 启动器 → MCP 握手）：
+  `initialize` **4.65 s**、`serverInfo {rea, 6.7.0}`、`instructions` 952 B、`tools/list` **207**、
+  公开名全部 ≤64 字符（最长 48）。
+- **桌面运行时路径**（Electron 44.7.0 as Node 24.21.0 直接跑启动器）：**207 工具 / 3.1 s**。
+- **真实 DSH 宿主**（独立 `DSH_HOME` + `dsh --profile rea-probe --no-open --port 46125`）：
+  启动无告警，`launcher.log` 记录 `launch local-install … agents\6.7.0\…\rea.mjs`，REA 进程存活。
+- **`REA_MCP_NODE` 实测生效**：设成 PATH 上的 node 后，`launcher.log` 里的 `cmd=` 变成
+  `C:\Program Files\nodejs\node.exe`，仍返回 207 工具。
+- **6.9.0 门禁复现**：装上 6.9.0 用 24.21.0 启动 → 上述引擎错误，`initialize` 超时（门禁在握手前退出）。
+- 脚本：`bash -n` 两个 `.sh` 通过；两个 `.ps1` PowerShell 5.1 解析 0 错误、BOM 保留；
+  JSON 全部可解析且无 BOM；`cordis.patch.yml` 的折叠往返校验（1900 B 逐字节一致）。
+
+### 升级提示
+
+v1.4.x → v1.5.0：设置 → 插件里**卸载再装**（同一 spec 重装会 `already-installed`），然后**重启** Harness。
+旧的 `~/.rea/dsh/agents/6.4.0` 可以留着（回滚用）也可以删；新版本装到 `agents/6.7.0`。
+没有 REA 6.7.0 的本地安装时会自动走 `npx rea-agents@6.7.0`（需要网络）。
+
+---
+
 ## v1.4.1 — 2026-11-15
 
 **主题：文档层——收录徽章 + README 图标 + issue #1 收尾（运行时零改动）。**

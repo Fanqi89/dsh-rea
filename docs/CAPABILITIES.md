@@ -1,6 +1,6 @@
 # 反编译能力全览
 
-> 插件把 REA（rea-agents 6.4.0，**170 个工具**）以 `mcp__rea__<tool>` 暴露给 Harness。
+> 插件把 REA（rea-agents 6.7.0，**207 个工具**）以 `mcp__rea__<tool>` 暴露给 Harness。
 > 本页回答三个问题：**能反编译什么**、**还差什么**、**哪些永远做不到**。
 > 依赖怎么装见 [SETUP.md](SETUP.md)。
 
@@ -29,6 +29,21 @@
 | **JEB 项目**：单元列表、类型/方法伪代码 | 已启动的 JEB 客户端（MCP） | `REA_JEB_MCP_URL` | `inspect_jeb_client`、`list_jeb_units` |
 | 固件：区域识别/解包/交给原生分析 | Linux + binwalk / Unblob | — | `inspect_firmware_regions`、`extract_firmware` |
 | ELF 布局、崩溃 core、mitmproxy 抓包 | Linux + pwntools / GDB / mitmdump | — | `inspect_binary_layout`、`inspect_recorded_crash` |
+
+### 2.1 rea-agents 6.7.0 新增的 37 个工具（6.4.0 → 6.7.0）
+
+上游从 6.4.0 到 6.7.0 净增 37 个工具（无删除），分三类。**本机只验证了它们在 `tools/list` 里存在，
+没有逐项跑通**——需要外部调试器的线要自己装对应工具：
+
+| 类别 | 新增工具 | 需要什么 |
+|---|---|---|
+| **动态分析**（Frida） | `list_frida_devices`、`list_frida_processes`、`start_frida_session`、`instrument_with_frida`、`load_frida_script`、`unload_frida_script`、`resume_frida_session`、`frida_session_status`、`close_frida_session` | 目标设备/进程上的 frida-server（未验证） |
+| **调试器**（GDB / rizin / Cutter） | `start_gdb_session`、`gdb_console`、`gdb_session_status`、`close_gdb_session`；`start_rizin_debug_session`、`rizin_debug_command`、`rizin_debug_session_status`、`close_rizin_debug_session`、`execute_rizin_command`、`cutter_command`、`list_cutter_sessions` | 本机 gdb / rizin / Cutter（未验证） |
+| **静态检查器**（多数零依赖） | `inspect_go_binary`、`inspect_rust_binary`、`inspect_wasm_artifact`、`compare_wasm_interfaces`、`inspect_sqlite_database`、`inspect_pcap_capture`、`inspect_pcap_client`、`inspect_packet_capture`、`inspect_packet_fields`、`inspect_signal_decoders`、`decode_signal_recording`、`inspect_dart_aot`、`identify_flutter_build`、`inspect_electron_fuses`、`project_harmony_application_graph`、`search_bytes`、`inspect_with_objdump`（需 binutils objdump） | 无（objdump 那条需 binutils） |
+
+> 这些能力没有改变平台边界：Frida/GDB/rizin 仍受 REA 的 host 门禁约束（Linux/macOS 侧更完整），
+> 而 Go / Rust / WASM / SQLite / PCAP / Electron fuses 这些纯静态检查在 Windows 上也可用。
+
 
 ## 3. 平台边界（不可绕过）
 
@@ -78,19 +93,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-wsl-linux-to
 
 | 能力 | 试这一句 / 这个工具 | 期望 |
 |---|---|---|
-| 工具已接入 | 让 Agent「列出你的 mcp__rea__ 工具」 | 170 个 `mcp__rea__*` |
+| 工具已接入 | 让 Agent「列出你的 mcp__rea__ 工具」 | 207 个 `mcp__rea__*` |
 | 原生反编译 | 「用 REA 打开 `C:\Windows\System32\notepad.exe` 并分析 main 的伪代码」 | 伪代码 + Evidence |
 | APK 代码 | 「反编译桌面上某个 apk 的 `com.xxx.MainActivity.onCreate`」 | Java 源码 |
 | APK 资源 | 「解码这个 apk 的资源表」 | 资源清单 |
 | Android 设备 | 「列出 adb 设备」 | 设备列表（或识别 adb 路径） |
 | 浏览器 | 「列出当前浏览器页面」 | CDP 目标列表 |
-| 引擎体检 | `npx -y rea-agents@6.4.0 doctor --json` | `ghidra`/`jadx`/`skil` 等检查项转绿 |
+| 引擎体检 | `npx -y rea-agents@6.7.0 doctor --json` | `ghidra`/`jadx`/`skil` 等检查项转绿 |
 
-## 6. 本机实测记录（Windows 10/11 x64 + DSH 0.2.0-rc.2 + rea-agents 6.4.0）
+## 6. 本机实测记录（Windows 10/11 x64 + DSH 0.2.0-rc.2 → 0.2.1-rc.5 + rea-agents 6.4.0 / 6.7.0）
 
 | 日期 | 项目 | 结果 |
 |---|---|---|
-| 2026-10-21 | MCP 接入 | 170 个 `mcp__rea__*` 注册成功；`initialize → rea@6.4.0` |
+| 2026-10-21 | MCP 接入（rea-agents 6.4.0） | 170 个 `mcp__rea__*` 注册成功；`initialize → rea@6.4.0` |
 | 2026-10-21 | **原生反编译** | Ghidra 12.1.4 分析 `notepad.exe`：9 段 / **794 个函数** / 557 字符串；`entry` 函数输出伪代码 `__security_init_cookie(); FUN_140023a50();` + 反汇编 + 调用者/被调者 |
 | 2026-10-21 | APK 包信息 | `com.llw` / v1.0 / minSdk 16 / targetSdk 30 / 6 类 / 7 资源 |
 | 2026-10-21 | APK 方法反编译 | `com.llw.MainActivity.onCreate` 输出完整 Java 源码（JADX 0.7.1 + JDK 21.0.11） |
@@ -99,8 +114,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-wsl-linux-to
 | 2026-10-21 | doctor | Ghidra 全项绿（version 12.1.4 / native decompiler win_x86_64 / JDK 21 64-bit / native authority） |
 | 2026-10-21 | capabilities | 18 项 provider 操作：8 可用 / 10 macOS 专属不可用（Windows 预期） |
 | 2026-11-07 | MCP 接入（v1.4.0 启动链） | 真实 DSH 0.2.1-rc.5 宿主端到端：`cli host → DeepSeek Harness.exe -e "<启动器>" → rea.mjs mcp`，服务进程存活、`launcher.log` 记录 `launch local-install`、stderr 无告警 |
-| 2026-11-07 | MCP 握手（v1.4.0） | Electron 44.7.0 as Node 24.21.0：`initialize` 4.9–6.9 s（本地层）/ 16.8 s（npx 层）、`instructions` 304 B、`tools/list` **170 个**、公开名全部 ≤64 字符（最长 48） |
+| 2026-11-07 | MCP 握手（v1.4.0 启动链） | Electron 44.7.0 as Node 24.21.0：`initialize` 4.9–6.9 s（本地层）/ 16.8 s（npx 层）、`instructions` 304 B、`tools/list` **170 个**（当时钉 6.4.0）、公开名全部 ≤64 字符（最长 48） |
 | 2026-11-07 | 跨版本审计 | DSH 0.2.1-rc.2 / rc.3 / rc.4 / rc.5 / 0.2.2-rc.1：`dsh-mcp-client` 配置面逐字节相同，`!!js` 全版本受支持，详见 [COMPAT-VERSIONS.md](COMPAT-VERSIONS.md) |
+| 2026-11-18 | **升级 rea-agents 6.4.0 → 6.7.0** | `tools/list` **170 → 207（+37，无删除）**；`instructions` 304 → 952 B；`initialize` 3.1–7.6 s（本地层）；compact inputSchema 183,725 → **85,705 B**（反而变小），full 365,646 → 667,642 B |
+| 2026-11-18 | **6.8.0 / 6.9.0 被 Node 门禁挡住** | 上游把 Node 下限抬到 `^24.22.1`；Harness 自带 24.21.0 上 6.9.0 直接拒绝启动：`REA requires Node.js 22.x (>=22.23.4), 24.x (>=24.22.1), 26.12.1+; this process runs Node.js 24.21.0` → 故钉 6.7.0，并提供 `REA_MCP_NODE` 逃生口 |
 
 ### 6.1 启动链路（与逆向能力无关，但决定「工具能不能出现」）
 
@@ -109,8 +126,8 @@ dsh-mcp-client 行（bundle 补丁）
   └─ command: !!js process.execPath + ELECTRON_RUN_AS_NODE=1   # Harness 自带 Node
        └─ 启动器（~/.rea/dsh/launcher.log 记录命中层与退出码）
             ├─ 1. $REA_MCP_ENTRY
-            ├─ 2. ~/.rea/dsh/agents/6.4.0/…/scripts/rea.mjs    # 离线本地层（setup 脚本准备）
-            └─ 3. npx -y rea-agents@6.4.0 mcp                  # 兜底（需网络 + PATH 上的 npx）
+            ├─ 2. ~/.rea/dsh/agents/6.7.0/…/scripts/rea.mjs    # 离线本地层（setup 脚本准备）
+            └─ 3. npx -y rea-agents@6.7.0 mcp                  # 兜底（需网络 + PATH 上的 npx）
 ```
 
 因此「没装 Node」「PATH 上 Node 太旧」「从 Finder 启动的 app 没有 npx」都不再导致静默缺工具；

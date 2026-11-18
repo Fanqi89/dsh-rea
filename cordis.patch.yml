@@ -3,7 +3,8 @@
 #
 # Configuration-only bundle: it inserts the shipped @deepseek-ai/dsh-mcp-client
 # with REA's local stdio server; that server's tools register on the model as
-# mcp__rea__<tool_name> (170 tools, longest public name 48 chars).
+# mcp__rea__<tool_name> (rea-agents 6.7.0 measured 207 tools; longest public name
+# is 48 chars, well inside the 64-char function-name budget).
 #
 # Why ONE row: a serverName may be registered only once per scope, so a second
 # row that also said `rea` would collide whenever both rows are active. Every
@@ -23,36 +24,43 @@
 #     child opens a second Harness window instead of running the script. Safe on
 #     every DSH build: the shipped headless launcher
 #     (resources/runtime/cli/bin/dsh.cmd) relies on the same mechanism.
-#   - REA requires Node ^22.19 || ^24.11 || >=26. The Harness runtime satisfies
-#     that on every supported DSH version; a user's PATH `node` may not (Node
-#     18/20 is still common), and a too-old runtime is a silent tool failure.
+#   - REA up to 6.7.0 requires Node ^22.19 || ^24.11 || >=26, which the Harness
+#     runtime satisfies; a user's PATH `node` may not (Node 18/20 is still
+#     common) and a too-old runtime is a silent tool failure.
+#   - REA 6.8.0+ raised that floor to ^22.23.4 || ^24.22.1 || >=26.12.1 and now
+#     refuses to start on the 24.21.0 runtime with a hard error. This bundle
+#     therefore pins 6.7.0 (the newest version the shipped runtime can run); the
+#     env var REA_MCP_NODE lets anyone who has Node >= 24.22.1 point the launcher
+#     at it and set REA_MCP_VERSION=6.9.0 themselves.
 #   - Verified here: Electron 44.7.0 as Node 24.21.0 loads REA's native
-#     @lydell/node-pty (N-API, ABI-stable) and completes a full MCP handshake.
+#     @lydell/node-pty (N-API, ABI-stable), completes the MCP handshake and
+#     answers tools/list with 207 tools in ~7.6 s.
 #
 # Launcher resolution order (the -e script below):
 #   1. $REA_MCP_ENTRY                      explicit entry file (`.../rea.mjs`)
 #   2. $REA_MCP_HOME/agents/<ver>/node_modules/rea-agents/scripts/rea.mjs
-#      default home = <home>/.rea/dsh, ver = $REA_MCP_VERSION or 6.4.0.
+#      default home = <home>/.rea/dsh, ver = $REA_MCP_VERSION or 6.7.0.
 #      Prepared by scripts/setup-rea-tools.ps1 (Windows) or
 #      scripts/setup-rea-tools.sh (macOS/Linux). Once present, start-up needs no
-#      npm/npx and no network, and is faster (~6.9 s vs ~16.8 s measured).
+#      npm/npx and no network, and is faster (~7.6 s vs ~16.8 s measured).
 #   3. npx -y rea-agents@<ver> mcp         (needs network + a usable node on PATH)
-# Every branch appends one line to <home>/launcher.log (64 KiB cap) with the
-# resolved command, the runtime version and the exit status - the first place to
-# look when the tools do not show up. On Windows that file also records spawn
-# errors that the MCP client only reports as an absent server.
+# Layer 2 runs on $REA_MCP_NODE when set, else on process.execPath; every branch
+# appends one line to <home>/launcher.log (64 KiB cap) with the resolved command,
+# the runtime version and the exit status - the first place to look when the
+# tools do not show up. On Windows that file also records spawn errors that the
+# MCP client only reports as an absent server.
 #
 # Knobs:
 # - env REA_MCP_INPUT_SCHEMA_PROFILE=compact advertises smaller input schemas
-#   (170 tools; the compact profile is ~1.7 MB of JSON, the full one is larger).
+#   (207 tools; compact is ~2.6 MB of JSON, the full profile ~3.2 MB).
 # - toolCallTimeoutMs bounds one tools/call; native providers (Ghidra) can spend
 #   minutes on their first query, so the default 60 s is raised here.
-# - maxInstructionBytes is left at its 32 KiB default: REA's initialize
-#   instructions measure 304 B (+21 B attribution header), so a bigger cap buys
+# - maxInstructionBytes is left at its 32 KiB default: REA 6.7.0's initialize
+#   instructions measure 952 B (+21 B attribution header), so a bigger cap buys
 #   nothing. Overshooting that cap is NOT truncation - it is treated as a failed
 #   connection and retried, i.e. the whole server disappears.
 # - failOnStartupError stays false so the Harness always boots: the first connect
-#   is awaited with no internal timeout, and REA's cold start is ~14 s, so a
+#   is awaited with no internal timeout, and REA's cold start is ~8-15 s, so a
 #   failure must degrade to "no tools yet", never to a boot failure.
 # - reconnect widens the retry budget from the default 10 attempts / 30 s cap
 #   (~2 min) to ~1 h, so starting the Harness before the network is up, before
@@ -66,7 +74,7 @@
 # Linux host. On Windows prepare it inside WSL first with
 #   powershell -File ./scripts/setup-wsl-linux-toolchain.ps1
 # then flip `disabled: true` to `false` here (or in your profile patch) and
-# restart the Harness. Enabling adds another ~170 tools (token cost). A literal
+# restart the Harness. Enabling adds another ~207 tools (token cost). A literal
 # `true` is used on purpose, so the row cannot flip by accident.
 # WSL_UTF8=1 keeps wsl.exe from emitting UTF-16 status text, which would corrupt
 # the JSON-RPC stream the first time WSL prints a setup/progress message.
@@ -82,7 +90,7 @@
           - '-e'
           - >-
             const{spawn}=require('node:child_process'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');const
-            V=process.env.REA_MCP_VERSION||'6.4.0',win=process.platform==='win32',home=process.env.REA_MCP_HOME||path.join(os.homedir(),'.rea','dsh');const
+            V=process.env.REA_MCP_VERSION||'6.7.0',nodeExe=process.env.REA_MCP_NODE||process.execPath,win=process.platform==='win32',home=process.env.REA_MCP_HOME||path.join(os.homedir(),'.rea','dsh');const
             isFile=p=>{try{return fs.statSync(p).isFile()}catch{return false}};const
             log=m=>{try{fs.mkdirSync(home,{recursive:true});const
             f=path.join(home,'launcher.log');try{if(fs.statSync(f).size>65536)fs.truncateSync(f,0)}catch{}fs.appendFileSync(f,new
@@ -90,7 +98,7 @@
             electron='+(process.versions.electron||'-')+' '+m+'\n')}catch{}};const
             env=Object.assign({},process.env,{ELECTRON_RUN_AS_NODE:'1'});const
             entry=process.env.REA_MCP_ENTRY||path.join(home,'agents',V,'node_modules','rea-agents','scripts','rea.mjs');let
-            cmd,args,how;if(isFile(entry)){cmd=process.execPath;args=[entry,'mcp'];how='local-install'}else
+            cmd,args,how;if(isFile(entry)){cmd=nodeExe;args=[entry,'mcp'];how='local-install'}else
             if(win){cmd=process.env.ComSpec||'cmd.exe';args=['/d','/s','/c','npx','-y','rea-agents@'+V,'mcp'];how='npx'}else{cmd='npx';args=['-y','rea-agents@'+V,'mcp'];how='npx'}log('launch
             '+how+' cmd='+cmd+' args='+JSON.stringify(args));const
             child=spawn(cmd,args,{stdio:'inherit',windowsHide:true,detached:!win,env:env});let
@@ -123,7 +131,7 @@
           - '--'
           - npx
           - '-y'
-          - rea-agents@6.4.0
+          - rea-agents@6.7.0
           - mcp
         env:
           WSL_UTF8: '1'

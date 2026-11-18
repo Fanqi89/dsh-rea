@@ -50,7 +50,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-$ReaVersion = '6.4.0'
+$ReaVersion = '6.7.0'
 $ReaPkg = "rea-agents@$ReaVersion"
 
 $GhidraVersion = '12.1.4'

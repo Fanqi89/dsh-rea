@@ -1,7 +1,7 @@
 {
   "id": "dsh-rea",
-  "version": "1.4.1",
-  "description": "REA (Reverse Engineer Anything) MCP bridge for DeepSeek Harness: registers the local rea-agents MCP server through @deepseek-ai/dsh-mcp-client and exposes 170 mcp__rea__* tools (native decompilation, APK classes/resources, .NET, JS/Electron, artifacts).",
+  "version": "1.5.0",
+  "description": "REA (Reverse Engineer Anything) MCP bridge for DeepSeek Harness: registers the local rea-agents MCP server through @deepseek-ai/dsh-mcp-client and exposes 207 mcp__rea__* tools (native decompilation, APK classes/resources, .NET, JS/Electron, Frida/GDB/rizin dynamic analysis, firmware, artifacts).",
   "engines": {
     "dsh": ">=0.2.1-rc.2"
   },
