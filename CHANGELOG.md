@@ -9,6 +9,106 @@ dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.1.0
 
 ---
 
+## v1.6.0 — 2026-11-18
+
+**主题：跟上上游 **rea-agents 6.9.0**（工具 **207 → 255**，+48，无删除）——
+做法不是降级妥协，而是给第 2 层**自带一份 Node 24.22.3**，并保留"老环境自动回退 6.7.0"的兜底。**
+
+### 上游现状（本机实测）
+
+| rea-agents | 发布 | `engines.node` | 工具数 |
+|---|---|---|---|
+| 6.4.0（v1.4.x） | 2026-10-11 | `^22.19.0 \|\| ^24.11.0 \|\| >=26.0.0` | 170 |
+| 6.7.0（v1.5.0；v1.6.0 起是回退目标） | 2026-10-18 | 同上 | 207 |
+| 6.8.0 | 2026-10-25 | **`^22.23.4 \|\| ^24.22.1 \|\| >=26.12.1`** | 未测 |
+| **6.9.0（本版钉的，上游 latest）** | 2026-11-12 | 同上 | **255** |
+
+### 为什么必须自带 Node
+
+DSH 0.2.1-rc.5 的运行时是 Electron 44.7.0 as **Node 24.21.0**（本机 PATH 上的 node 是 24.19.0），
+而 6.9.0 要求 `>=24.22.1`。用自带 Node 启动 6.9.0，REA 在握手前就硬拒绝：
+
+```
+REA requires Node.js 22.x (>=22.23.4), 24.x (>=24.22.1), 26.12.1+;
+this process runs Node.js 24.21.0. Install a supported release, then retry.
+```
+
+v1.5.x 因此钉在 6.7.0。本版的做法：
+
+- 配置脚本把 **Node v24.22.3**（LTS Krypton，win-x64 zip；SHA-256 `e612af99…`）装到
+  `~/.rea/dsh/node`，写 `version.txt`；POSIX 走官方 `node-v24.22.3-<os>-<arch>.tar.gz`
+  + `SHASUMS256.txt` 校验；WSL 内的 `linux-tools-setup.sh` 也会装到 `/usr/local`；
+- 启动器选运行时：`REA_MCP_NODE` > `~/.rea/dsh/node` > `process.execPath`；
+- **自动回退**：Node 太旧且用户没显式锁 `REA_MCP_VERSION` 时，回退到 `agents/6.7.0`
+  （207 工具）并在 `launcher.log` 记 `fallback-from=6.9.0-node-too-old`；
+- 日志行现在带版本与 node 来源：`launch local-install ver=6.9.0 node=provisioned(24.22.3) …`。
+
+### 新增的 48 个工具（6.7.0 → 6.9.0，无删除）
+
+- **构建/环境取证（build computer）10 个**：`start_build_computer`、`act_on_build_computer`、
+  `check_build_task`、`measure_build_task`、`mark_build_checkpoint`、`record_build_consent`、
+  `start_build_capture`、`stop_build_capture`、`export_build_environment`、`export_environment_bundle`
+- **分析与工作流 6 个**：`guided_workflows`、`read_guidance_section`、`search_guidance`、
+  `inspect_analysis_settings`、`update_analysis_settings`、`reset_investigation`
+- **对照与审计 3 个**：`compare_static_and_observed_endpoints`、`audit_release_exposure`、`inspect_desktop_application`
+- **静态检查器 29 个**：ELF notes / unwind ranges，PE imports / load config / certificates，
+  native exports / initializers，NTFS journal，devicetree，kernel module / build config，
+  Python pyc，Erlang BEAM，il2cpp metadata，V8 code cache，GPU code objects，Android JNI bindings，
+  APK signature，Apple IPS，Playwright trace，Windows shortcut，model artifact，byte entropy，
+  binary hardening，API contract，bundle resources，`decompile_all`，`match_native_functions` 等
+
+> 与上一批一样：**只在 `tools/list` 里验证了存在**，没有逐项跑通。
+
+### 实测（Windows + DSH 0.2.1-rc.5，Node 24.22.3）
+
+| 指标 | 6.7.0 | 6.9.0 |
+|---|---|---|
+| `tools/list` | 207 | **255** |
+| `instructions` | 952 B | 2,604 B |
+| `initialize` | 3.1–7.6 s | **1.1 s** |
+| inputSchema 合计（默认 compact） | 85,705 B | **186,256 B** |
+| inputSchema 合计（full） | 667,642 B | 1,021,510 B |
+| 工具名 + 描述 | 96,343 字符 | 128,880 字符（≈3.7 万 token） |
+| 最长工具名（加 `mcp__rea__` 前缀） | 48 | 48（上限 64） |
+
+### 变更
+
+- `cordis.patch.yml`：启动器 1,900 → **2,996 B**（加 Node 选择 + 回退 + 日志字段），
+  默认版本 `6.7.0 → 6.9.0`，`rea-linux` 行同步 6.9.0，注释换成 255 / 2,604 B / 1.1 s 的真实值。
+- `scripts/setup-rea-tools.ps1`：`$ReaVersion = 6.9.0`；新增第 **1c 步**把 Node 24.22.3 装到
+  `~\.rea\dsh\node`（`-SkipNode` 可跳过，`-DryRun` 只打印）。
+- `scripts/setup-rea-tools.sh`：`REA_VERSION=6.9.0`；新增第 **8c 步**装 Node（`--skip-node`）。
+- `scripts/linux-tools-setup.sh`：Node 22 → 版本自检 + 必要时装 24.22.3，`rea-agents@6.9.0`。
+- `scripts/setup-wsl-linux-toolchain.ps1`：提示里的版本与工具数同步。
+- `package.json` / `dsh.plugin.json` 1.5.2 → **1.6.0**，描述 207 → 255。
+- README / docs（CAPABILITIES §2.2 新增 48 工具、§6 实测行；COMPAT §8 扩成三版本对比 + Node 方案；
+  SETUP / SETUP-POSIX / TOGGLE 的数字与 Node 说明）。
+
+### 验证
+
+- **默认路径**（真实补丁行 → 启动器 → 握手）：`ver=6.9.0 node=provisioned(24.22.3)`、
+  `initialize` **1,051 ms**、`serverInfo {rea, 6.9.0}`、`tools/list` **255**、`instructions` **2,604 B**、
+  公开名全部 ≤64 字符。
+- **回退路径**（临时 `REA_MCP_HOME`、无 `node/`、宿主 Node 24.19）：回退 6.7.0 → **207 工具**成功，
+  日志含 `fallback-from=6.9.0-node-too-old`。
+- **显式锁版本**（`REA_MCP_VERSION=6.9.0` + 旧 Node）：不回退，`npx` 拉起后由 REA 自身拒绝
+  （日志 `server exit code=1`，stderr 是上面那段引擎错误）——符合"锁了就以你的为准"。
+- **`REA_MCP_NODE` 覆盖**：指到 24.22.3 时被信任，不再误判版本。
+- 脚本：`.ps1` PowerShell 5.1 解析 0 错误、BOM 保留，`-DryRun -WithToggle` 正确报告
+  "Node 已存在（v24.22.3）"；`.sh` 通过 `bash -n`，`--dry-run` 正确；YAML 折叠往返 **2,996 B** 一致、
+  两条 entry 的 schema 校验 OK。
+
+### 已知限制
+
+- Node 运行时是**额外安装**（win-x64 解压约 94 MB；`~/.rea/dsh` 里 6.9.0 自身因
+  `bundleDependencies` 自带依赖约 316 MB）。
+- 没跑过脚本的新机器若 Harness Node < 24.22.1，会先回退 6.7.0（有日志），
+  跑一次 `setup-rea-tools` 才会升级到 6.9.0。
+- POSIX 的 Node 安装路径与 WSL 内的 24.22.3 安装**本机未实测**（Windows 侧已实测）；
+  `~/.rea/dsh/node` 的版本判断依赖 `version.txt`，手工替换 node.exe 时请同步改它或设 `REA_MCP_NODE`。
+
+---
+
 ## v1.5.2 — 2026-11-18
 
 **主题：把 `dsh-rea-toggle` 的上游来源与作者写清楚（纯文档/注释，运行时零改动）。**

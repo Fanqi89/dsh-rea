@@ -15,7 +15,7 @@
 一个 **configuration-only bundle**：不写一行插件代码，通过 DeepSeek Harness 自带的
 `@deepseek-ai/dsh-mcp-client` 把本地 REA 的 stdio MCP 服务器接入 Harness。
 接入后 REA 的全部工具（`open_binary`、`analyze_javascript_application`、
-`inspect_managed_artifact`、反编译 / 伪代码 / 字符串 / 引用追踪等，rea-agents 6.7.0 实测 **207 个**）会以
+`inspect_managed_artifact`、反编译 / 伪代码 / 字符串 / 引用追踪等，rea-agents 6.9.0 实测 **255 个**）会以
 
 ```text
 mcp__rea__<tool_name>
@@ -63,8 +63,8 @@ dsh-rea/
 | 项目 | 要求 |
 |---|---|
 | DeepSeek Harness | **≥ 0.2.1-rc.2**（`package.json` / `dsh.plugin.json` 的 `engines.dsh` 声明，DSH 用 `includePrerelease` 校验；低于此版本明确报 incompatible 而不是静默无工具）。0.2.1-rc.2 / rc.3 / rc.4 / rc.5 / 0.2.2-rc.1 已逐版本审计，见 [docs/COMPAT-VERSIONS.md](docs/COMPAT-VERSIONS.md)。仍在 0.2.0-rc.2 上的话请装 v1.3.0 |
-| Node.js | **不需要**自己装：启动器用 DSH 自带的 Node（Electron 的 `ELECTRON_RUN_AS_NODE` 模式，实测 24.21.0），因此不受 PATH 上 Node 版本影响。**版本上限要注意**：REA 6.7.0 要求 `^22.19 \|\| ^24.11 \|\| ≥26`（自带 Node 满足）；REA **6.8.0+ 抬到 `^22.23.4 \|\| ^24.22.1 \|\| ≥26.12.1`**，24.21.0 会被拒绝启动——想跑更高版本就设 `REA_MCP_NODE` 指向 ≥24.22.1 的 node。走兜底 `npx` 层时才需要 PATH 上有可用的 `npx` |
-| 网络 | 首次启动只经 `npx -y rea-agents@6.7.0` 兜底拉包；跑过 `scripts/setup-rea-tools.{ps1,sh}` 后走**本地固定安装**（`~/.rea/dsh/agents/6.7.0`），离线可用、冷启动更快 |
+| Node.js | **不需要**自己装：DSH 自带 Node 24.21.0，而 rea-agents **6.9.0** 要求 `^22.23.4 \|\| ^24.22.1 \|\| ≥26.12.1` —— 差一点点，REA 就会拒绝启动。所以 `scripts/setup-rea-tools.{ps1,sh}` 会往 `~/.rea/dsh/node` 放一份 **Node 24.22.3**（SHA-256 钉扎），启动器**优先用它**；没装也能跑：检测到 Node 太旧就自动回退到 `~/.rea/dsh/agents/6.7.0`（207 工具）并在 `launcher.log` 记 `fallback-from=6.9.0-node-too-old`。顺序：`REA_MCP_NODE` > `~/.rea/dsh/node` > Harness 自带；`REA_MCP_VERSION` 可显式锁版本（锁了就不回退）。走 `npx` 兜底层时才需要 PATH 上有可用的 `npx` |
+| 网络 | 首次启动只经 `npx -y rea-agents@6.9.0` 兜底拉包；跑过 `scripts/setup-rea-tools.{ps1,sh}` 后走**本地固定安装**（`~/.rea/dsh/agents/6.9.0`），离线可用、冷启动更快 |
 | 深度原生分析 | 需要本机已有的 Ghidra / IDA（Windows 无 Hopper）；Ghidra 需 `GHIDRA_INSTALL_DIR` |
 | 静态 JS / .NET 分析 | 无需任何反汇编引擎 |
 | APK 代码反编译 | 完整 JDK 17+（含 `jdk.compiler`）+ `jadx-headless-mcp 0.7.1` + `REA_JADX_MCP_JAR` |
@@ -72,7 +72,7 @@ dsh-rea/
 | Android 设备 | adb（platform-tools）+ `REA_ADB_PATH` |
 | 浏览器 CDP | Chrome / Edge + `REA_BROWSER_EXECUTABLE` |
 | **Linux 专属能力**（ELF 布局 / 崩溃 core / 固件 / mitmproxy / `.deb`） | WSL 2 + Ubuntu 24.04 + pwntools / binwalk / unblob / mitmproxy，由 `scripts/setup-wsl-linux-toolchain.ps1` 准备，再启用补丁里的 `rea-linux` 行 |
-| 调查工作流技能 | `npx skills add morluto/rea --skill reverse-engineer-anything`，或 `npx -y rea-agents@6.7.0 setup --skill --yes`（装与包版本一致的技能） |
+| 调查工作流技能 | `npx skills add morluto/rea --skill reverse-engineer-anything`，或 `npx -y rea-agents@6.9.0 setup --skill --yes`（装与包版本一致的技能） |
 
 > 后四项都用一条命令补齐（Windows）：
 > `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-rea-tools.ps1 -WithApktool`
@@ -107,9 +107,9 @@ dsh plugin --profile "$env:DSH_PROFILE" add "X:\path\to\dsh-rea"
 > dsh-rea **不包含它的任何代码**（不 vendor / 不 fork / 不打 patch），只负责接线、脚本与文档；
 > 完整核对表见 [docs/TOGGLE.md](docs/TOGGLE.md) 第 9 节。
 
-REA 的 207 个工具在**每一轮请求**里都要带 schema。实测（rea-agents 6.7.0、默认 compact）：
-工具名 + 描述 **96,343 字符 ≈ 2.75 万 token**，inputSchema 另 **85,705 B ≈ 2.4 万 token** ——
-做逆向时这笔开销很值，写脚本、聊天时就是死重。
+REA 的 255 个工具在**每一轮请求**里都要带 schema。实测（rea-agents 6.9.0、Node 24.22.3、默认 compact）：
+工具名 + 描述 **128,880 字符 ≈ 3.7 万 token**，inputSchema 另 **186,256 B ≈ 5.3 万 token** ——
+也就是一轮请求里约 **9 万 token 量级**的工具面。做逆向时这笔开销很值，写脚本、聊天时就是死重。
 
 上游插件 [`phoushen/dsh-rea-toggle`](https://github.com/phoushen/dsh-rea-toggle)（作者 phoushen，MIT）
 在输入框下方加一枚 `REA ON / REA OFF` 开关，翻的就是我们这行 `rea-mcp` 的 `disabled` 标志：
@@ -168,8 +168,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-wsl-linux-to
 # 2) 把 cordis.patch.yml 里 rea-linux 那行的 disabled: true 改成 false，然后重启 Harness
 ```
 
-启用后这些工具以 `mcp__rea-linux__*` 出现（约 207 个，token 成本翻倍，建议仅在需要时开）。
-WSL 内会装好：`pwntools`、`binwalk`、`unblob`、`mitmproxy`、`gdb`、`binutils`、`xz`、`Node.js 22`、`rea-agents 6.7.0`。
+启用后这些工具以 `mcp__rea-linux__*` 出现（约 255 个，token 成本翻倍，建议仅在需要时开）。
+WSL 内会装好：`pwntools`、`binwalk`、`unblob`、`mitmproxy`、`gdb`、`binutils`、`xz`、`Node.js 24.22.3`、`rea-agents 6.9.0`。
 
 > 只想先拆 `.deb` 不装 WSL：用 7-Zip 独立版即可（`C:\tools\7zip\7zr.exe x pkg.deb` → `7zr x data.tar.xz`），
 > 但 ELF 的反编译仍需 Linux 实例。
@@ -178,15 +178,15 @@ WSL 内会装好：`pwntools`、`binwalk`、`unblob`、`mitmproxy`、`gdb`、`bi
 
 安装成功后，向 Agent 提一句例如「列出你的 mcp__rea__ 工具」，或直接调用
 `mcp__rea__binary_session`（输入 `{}`）查看 `result.tool_availability`。
-REA 服务端自身冷启动约 **3–15 秒**（6.7.0 实测：本地固定安装 3.1–7.6 s，npx 冷/热 14.3–16.8 s），
+REA 服务端自身冷启动约 **1–15 秒**（6.9.0 实测：自带 Node 24.22.3 + 本地固定安装 **~1.1 s**；6.7.0 走 Harness 自带 Node 是 3.1–7.6 s；npx 冷/热 14.3–16.8 s），
 这段时间里工具还没注册，属正常，等它连上或触发一次 reconnect 即可。
 
-本机实测（2026-10-12/21/11-07，DSH 0.2.0-rc.2 → 0.2.1-rc.5 + rea-agents 6.7.0 + Windows）：
+本机实测（2026-10-12/21/11-07，DSH 0.2.0-rc.2 → 0.2.1-rc.5 + rea-agents 6.9.0 + Windows）：
 
 - `plugin_manager install_bundle` → `application: applied`；
-- `cordis_inspect_query Tool.listTools` 确认 **207 个 `mcp__rea__*` 工具**已注册在线；
+- `cordis_inspect_query Tool.listTools` 确认 **255 个 `mcp__rea__*` 工具**已注册在线；
 - stdio 握手实测：启动器拉起的 `rea mcp` →
-  `initialize` 返回 `rea@6.7.0`，`tools/list` 返回 207 个工具；
+  `initialize` 返回 `rea@6.9.0`，`tools/list` 返回 255 个工具；
 - 补丁合入验证：在**独立的 `DSH_HOME`** 里建临时 profile（`bundles: [dsh-base, dsh-web-app, dsh-rea]`），
   `dsh --profile probe --dump-config` 能看到 `# == dsh-rea` 层贡献的 `rea-mcp` 行
   （`command: !!js process.execPath` + `args: ['-e', …]`）与默认禁用的 `rea-linux` 行，stderr 无告警；
@@ -228,7 +228,7 @@ npm/CLI 安装则是 node 本身），所以不依赖用户 PATH 上的 `node`/`
 | 层 | 位置 | 需要什么 |
 |---|---|---|
 | 1 | `$REA_MCP_ENTRY` | 你自己指定的入口文件（`…/scripts/rea.mjs`） |
-| 2 | `$REA_MCP_HOME/agents/<ver>/node_modules/rea-agents/scripts/rea.mjs`，默认 `~/.rea/dsh`、`6.7.0` | 跑过一次 `setup-rea-tools.{ps1,sh}`：离线、无需 npm/npx、冷启动更快 |
+| 2 | `$REA_MCP_HOME/agents/<ver>/node_modules/rea-agents/scripts/rea.mjs`，默认 `~/.rea/dsh`、`6.9.0` | 跑过一次 `setup-rea-tools.{ps1,sh}`：离线、无需 npm/npx、冷启动更快 |
 | 3 | `npx -y rea-agents@<ver> mcp` | 网络 + PATH 上有可用的 `npx`（Windows 经 `cmd.exe /d /s /c`） |
 
 命中哪一层、用的什么命令、子进程怎么退出，都会追加到 **`~/.rea/dsh/launcher.log`**（上限 64 KiB）——
@@ -247,12 +247,12 @@ Harness 关闭时 Windows 用 `taskkill /T /F`、POSIX 用进程组 `SIGTERM`（
 |---|---|---|
 | `command` | `!!js process.execPath` | 用 Harness 自带的 Node（桌面版是 Electron + `ELECTRON_RUN_AS_NODE=1`），不依赖 PATH |
 | `env.ELECTRON_RUN_AS_NODE` | `1` | 缺了它，Electron 子进程会**再开一个 Harness 窗口**而不是执行脚本 |
-| `env.REA_MCP_INPUT_SCHEMA_PROFILE` | `compact` | **token 成本开关**。本机对 **6.7.0（207 工具）** 实测（Electron 44.7.0 as Node 24.21.0）：模型可见的 inputSchema 合计 **compact ≈ 86 KB / full ≈ 668 KB**（工具描述另 ≈ 92 KB），粗估每轮 **2.4 万 vs 19 万** token 的差别。想要完整嵌套 schema 就删掉整个 `env` 块 |
+| `env.REA_MCP_INPUT_SCHEMA_PROFILE` | `compact` | **token 成本开关**。本机对 **6.9.0（255 工具，Node 24.22.3）** 实测：inputSchema 合计 **compact 186,256 B / full 1,021,510 B**（工具描述另 123,790 B），粗估每轮 **5.3 万 vs 29 万** token 的差别。**6.9.0 起 compact 已是 REA 自己的默认**，这里显式写死以免上游改默认 |
 | `toolCallTimeoutMs` | `1200000`（20 分钟） | 单次 `tools/call` 上限。Ghidra 首查默认 330 s 启动预算，故高于默认 60 s |
 | `failOnStartupError` | `false` | `false`：REA 起不来时 Harness 照常启动、只是没有 REA 工具（激活会 `await` 首连且**没有内部超时**，所以这一项必须是 `false`）；`true` 便于排查但会把 3–15 s 冷启动抖动变成启动失败 |
 | `reconnect` | `maxAttempts: 60`、`maxDelayMs: 60000` | 默认只有 10 次 / 30 s 上限（约 2 分钟就放弃并**注销工具**）。放宽到约 1 小时，覆盖「先开 Harness、后连网 / 后启 WSL / 本地安装还没装完」这类顺序问题。**只写这四个官方子键**（`enabled/initialDelayMs/maxDelayMs/maxAttempts`）——写了未知子键会让整行加载失败 |
-| `maxInstructionBytes` | 不设置（= 默认 32768） | REA 6.7.0 的 instructions 实测 **952 B**（含归属头 973 B），默认上限有 30 倍余量；注意超限不是截断而是**判成连接失败并重试**，即整个服务器消失 |
-| `REA_MCP_VERSION`（环境变量） | 不设置（= `6.7.0`） | 启动器第 2/3 层共用的版本号；升级 REA 时改这一个值，第 2 层还要按新版本号重新安装 |
+| `maxInstructionBytes` | 不设置（= 默认 32768） | REA 6.9.0 的 instructions 实测 **2,604 B**（含归属头 2,625 B），默认上限仍有 12 倍余量；注意超限不是截断而是**判成连接失败并重试**，即整个服务器消失 |
+| `REA_MCP_VERSION`（环境变量） | 不设置（= `6.9.0`） | 启动器第 2/3 层共用的版本号；**显式设置时不再自动回退**（锁什么就是什么），第 2 层要按新版本号重新安装 |
 | `REA_MCP_NODE`（环境变量） | 不设置（= 用 Harness 自带 Node） | 指定第 2 层用哪个 node 可执行文件。**只有想跑 REA 6.8.0+ 时才需要**：从 6.8.0 起 REA 要求 Node `^22.23.4 \|\| ^24.22.1 \|\| >=26.12.1`，而本机 Harness 自带的是 24.21.0，会被 REA 直接拒绝启动（实测报 `REA requires Node.js … this process runs Node.js 24.21.0`）。有 ≥24.22.1 的 Node 时设 `REA_MCP_NODE` + `REA_MCP_VERSION=6.9.0` 即可 |
 
 修改补丁后需要重启 Harness 生效；**不要**为同一服务器再复制第二个条目
@@ -262,7 +262,14 @@ Harness 关闭时 Windows 用 `taskkill /T /F`、POSIX 用进程组 `SIGTERM`（
 
 完整的「每个版本做了什么、修了什么、怎么验证」见 **[CHANGELOG.md](CHANGELOG.md)**；摘要：
 
-- **v1.5.2**（当前）：把上游开关插件 **`dsh-rea-toggle`** 的来源与作者写清楚——
+- **v1.6.0**（当前）：跟上上游 **rea-agents 6.9.0**（工具 **207 → 255 个**，+48，无删除）——
+  但 6.9.0 要求 Node `^22.23.4 || ^24.22.1 || >=26.12.1`，而 Harness 自带 **24.21.0**，
+  所以本版**自带一份 Node 24.22.3**（`~/.rea/dsh/node`，SHA-256 钉扎；setup 脚本第 1c / 8c 步），
+  启动器优先用它；没有这份 Node 时**自动回退到 6.7.0**（207 工具）并在 `launcher.log` 记录
+  `fallback-from=6.9.0-node-too-old`，不会让老环境丢工具。实测：`initialize` **1.1 s**、
+  `tools/list` **255**、`instructions` **2,604 B**、默认 compact inputSchema **186,256 B**（full 1,021,510 B）。
+  工具可用 `REA_MCP_NODE` / `REA_MCP_VERSION` 覆盖。
+- **v1.5.2**：把上游开关插件 **`dsh-rea-toggle`** 的来源与作者写清楚——
   上游仓库 <https://github.com/phoushen/dsh-rea-toggle>、作者 **phoushen**、MIT（`Copyright (c) 2026 phoushen`）、
   接入版本 **v1.0.0**，dsh-rea **不含其代码**；README / [docs/TOGGLE.md](docs/TOGGLE.md) / 补丁注释三处标注。
   **运行时与 v1.5.1 完全一致**。
@@ -309,10 +316,11 @@ Harness 关闭时 Windows 用 `taskkill /T /F`、POSIX 用进程组 `SIGTERM`（
 - **v1.0.1**：单行 + Node 启动器；修复旧构建下第二条平台行显示「异常」的问题。
 - **v1.0.0**：双行 + `disabled: !!js`（在较旧 Harness 上可能出现 1 运行中 / 1 异常）。
 
-十个标签可共存、互不冲突；任意版本都能按标签锁装：
+十一个标签可共存、互不冲突；任意版本都能按标签锁装：
 
 ```powershell
-dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.5.2   # 最新（上游开关来源/作者标注）
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.6.0   # 最新（REA 6.9.0，255 工具，自带 Node 24.22.3）
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.5.2   # 上游开关来源/作者标注
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.5.1   # 图形开关接线 + 文档
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.5.0   # REA 6.7.0，207 工具
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.4.1   # 文档/徽章；运行时同 v1.4.0（REA 6.4.0，170 工具）
@@ -349,22 +357,23 @@ Harness 启动
             └─ command: !!js process.execPath  args: ['-e', <启动器>]
                  └─ 启动器解析入口（launch.log 记录命中的层）
                       ├─ 1. $REA_MCP_ENTRY
-                      ├─ 2. ~/.rea/dsh/agents/6.7.0/…/scripts/rea.mjs   （本地固定安装，离线）
-                      └─ 3. npx -y rea-agents@6.7.0 mcp                  （兜底，Windows 经 cmd.exe）
-                           └─ MCP 握手 + tools/list（6.7.0 实测 207 个工具）
+                      ├─ 2. ~/.rea/dsh/agents/6.9.0/…/scripts/rea.mjs   （本地固定安装，离线）
+                      │     └─ 用 ~/.rea/dsh/node/node.exe（Node 24.22.3；缺失且宿主 Node < 24.22.1 时回退 6.7.0）
+                      └─ 3. npx -y rea-agents@6.9.0 mcp                  （兜底，Windows 经 cmd.exe）
+                           └─ MCP 握手 + tools/list（6.9.0 实测 255 个工具）
                                 └─ 注册为 ctx.tools：mcp__rea__open_binary、mcp__rea__analyze_function、…
 ```
 
 选型依据来自 Harness 官方 `cordis-plugin-development` 技能的
 「Connect an MCP server through a configuration-only bundle」路线，以及 REA 上游文档对
 DeepSeek Harness 的官方接入说明（`rea setup --client dsh` 写入的正是同款
-`dsh-mcp-client` stdio 条目；npm 6.7.0 尚未包含 `--client dsh`，故本插件手工内联了等价配置）。
+`dsh-mcp-client` stdio 条目；rea-agents 6.9.0 的 `rea mcp --help` 仍只有 `add`/`doctor`（无 `--client dsh`），故本插件手工内联了等价配置）。
 
 ## 故障排查
 
 1. **没有 `mcp__rea__*` 工具**：先看 **`~/.rea/dsh/launcher.log`** 最后几行——它会写明命中了哪一层、
    用的命令和子进程退出码。`launch local-install` 但没工具 → REA 自己在启动时报错，手动跑
-   `node "~/.rea/dsh/agents/6.7.0/node_modules/rea-agents/scripts/rea.mjs" mcp` 看 stderr；
+   `node "~/.rea/dsh/agents/6.9.0/node_modules/rea-agents/scripts/rea.mjs" mcp` 看 stderr；
    `launch npx` 且后面没有 exit 行 → npx 层在等网络（跑一次 setup 脚本装本地层即可离线）；
    完全没有新行 → 补丁没合入（要重启 Harness）。
 2. **插件面板显示「共 2 个组件 · 1 运行中 · 1 异常」**：这是 v1.0.0 的双行补丁在部分
@@ -374,7 +383,7 @@ DeepSeek Harness 的官方接入说明（`rea setup --client dsh` 写入的正�
    或在 `launcher.log` 里确认命中的是不是 `npx` 层。`failOnStartupError` 保持 `false`：
    激活会等首连且没有内部超时，设成 `true` 只会把冷启动抖动变成 Harness 启动失败。
 4. **原生分析报 provider 缺失**：静态 JS/.NET 不需要引擎；原生需 Hopper/Ghidra/IDA，
-   用 `npx -y rea-agents@6.7.0 doctor --json` 诊断（`rea doctor` 同理）。
+   用 `npx -y rea-agents@6.9.0 doctor --json` 诊断（`rea doctor` 同理）。
 5. **token 消耗过高**：确认 `env.REA_MCP_INPUT_SCHEMA_PROFILE: compact` 在配置里；
    仍嫌大就仅在逆向会话启用本插件。
 6. **重装同一路径报 `ambiguous-install`**：属于预期——先卸载再安装（见上）。

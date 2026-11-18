@@ -580,9 +580,9 @@ reconnect             # 键存在；enabled/initialDelayMs/maxDelayMs/maxAttempt
 ```
 ---
 
-## 8. 后续更新（2026-11-18）：REA 固定版本 6.4.0 → 6.7.0
+## 8. 后续更新（2026-11-18）：REA 固定版本 6.4.0 → 6.7.0 → 6.9.0
 
-本节是发布 v1.5.0 时补记的，**不属于 2026-11-15 那次审计的原始范围**（那次只审 DSH 版本，REA 只测了 6.4.0）。
+本节是发布 v1.5.0 / v1.6.0 时补记的，**不属于 2026-11-15 那次审计的原始范围**（那次只审 DSH 版本，REA 只测了 6.4.0）。
 
 ### 8.1 上游现状
 
@@ -590,43 +590,54 @@ reconnect             # 键存在；enabled/initialDelayMs/maxDelayMs/maxAttempt
 |---|---|---|---|
 | 6.4.0（v1.4.x 钉的版本） | 2026-10-11 | `^22.19.0 \|\| ^24.11.0 \|\| >=26.0.0` | **170** |
 | 6.5.0 | 2026-10-14 | 同上 | 未测 |
-| 6.7.0（v1.5.0 钉的版本） | 2026-10-18 | 同上 | **207**（+37，无删除） |
-| 6.8.0 | 2026-10-25 | **`^22.23.4 \|\| ^24.22.1 \|\| >=26.12.1`** | 未测（被 Node 门禁挡住） |
-| 6.9.0（上游 latest） | 2026-11-12 | 同上 | 未测（被 Node 门禁挡住） |
+| 6.7.0（v1.5.0 钉的；v1.6.0 起是回退目标） | 2026-10-18 | 同上 | **207**（+37，无删除） |
+| 6.8.0 | 2026-10-25 | **`^22.23.4 \|\| ^24.22.1 \|\| >=26.12.1`** | 未测 |
+| **6.9.0（v1.6.0 钉的，上游 latest）** | 2026-11-12 | 同上 | **255**（+48，无删除） |
 
-### 8.2 为什么止步 6.7.0
+### 8.2 为什么 v1.5.x 止步 6.7.0，v1.6.0 才上 6.9.0
 
 DSH 桌面版的运行时是 Electron 44.7.0 as **Node 24.21.0**（`resources/runtime/primary-runtime/dependencies/node/bin/node.exe` 也是 24.21.0），
-本机 PATH 上的 node 是 24.19.0 —— 两者都低于 6.8.0 要求的 24.22.1。实测把 6.9.0 装上后用 DSH 的 Node 启动：
+本机 PATH 上的 node 是 24.19.0 —— 两者都低于 6.8.0 要求的 24.22.1。用 DSH 的 Node 启动 6.9.0：
 
 ```
 REA requires Node.js 22.x (>=22.23.4), 24.x (>=24.22.1), 26.12.1+;
 this process runs Node.js 24.21.0. Install a supported release, then retry.
 ```
 
-REA 在启动早期就硬拒绝（不是 warning），所以 6.8/6.9 在当前 DSH 运行时上不可能工作。
-6.7.0 是**能满足 engines 的最新一版**，且实测 207 个工具、握手正常。
+REA 在启动早期就硬拒绝（不是 warning），所以 **6.8/6.9 在 DSH 自带运行时上不可能工作**。
+v1.6.0 的解法不是"降版本"，而是**给第 2 层自带一份 Node**：
 
-### 8.3 6.4.0 → 6.7.0 的实测差异（同一台机器、Electron as Node 24.21.0）
+- `scripts/setup-rea-tools.ps1`（第 1c 步）/ `setup-rea-tools.sh`（第 8c 步）把 **Node v24.22.3**
+  装到 `~/.rea/dsh/node`（Windows 用 win-x64 zip + 钉扎 SHA-256；POSIX 用对应 tar.gz + 官方
+  SHASUMS256.txt 校验），并写 `version.txt`；
+- 启动器选运行时的顺序：`REA_MCP_NODE` > `~/.rea/dsh/node` > `process.execPath`；
+- Node 太旧**且**用户没显式锁 `REA_MCP_VERSION` 时，回退到 `agents/6.7.0` 并在
+  `launcher.log` 记 `fallback-from=6.9.0-node-too-old` —— 老环境不会突然丢工具。
 
-| 指标 | 6.4.0 | 6.7.0 |
-|---|---|---|
-| `tools/list` 数量 | 170 | **207**（+37 / -0） |
-| `instructions` | 304 B | 952 B |
-| `initialize`（本地固定安装） | 4.9–6.9 s | 3.1–7.6 s |
-| `tools/list` 全量 JSON | 1,772,762 B | 2,576,421 B |
-| inputSchema 合计（compact） | 183,725 B | **85,705 B**（变小） |
-| inputSchema 合计（full） | 365,646 B | 667,642 B |
-| 工具描述合计 | 58,597 B | 92,270 B |
+### 8.3 实测差异（同一台机器）
 
-新增的 37 个工具：Frida 动态插桩 9 个、GDB 4 个、rizin/Cutter 7 个、静态检查器（Go / Rust / WASM /
-SQLite / PCAP / 抓包 / 信号解码 / Dart AOT / Flutter / Harmony 应用图 / Electron fuses / objdump /
-`search_bytes` / `compare_wasm_interfaces` 等）17 个；**没有任何工具被删除**，
-所以 v1.5.0 对已有的 170 个调用方式是向后兼容的。
+| 指标 | 6.4.0 | 6.7.0 | 6.9.0 |
+|---|---|---|---|
+| `tools/list` 数量 | 170 | **207**（+37 / -0） | **255**（+48 / -0） |
+| `instructions` | 304 B | 952 B | 2,604 B |
+| `initialize`（本地固定安装） | 4.9–6.9 s | 3.1–7.6 s | **1.1 s**（Node 24.22.3） |
+| `tools/list` 全量 JSON | 1,772,762 B | 2,576,421 B | 4,655,054 B |
+| inputSchema 合计（compact） | 183,725 B | 85,705 B | **186,256 B** |
+| inputSchema 合计（full） | 365,646 B | 667,642 B | 1,021,510 B |
+| 工具名 + 描述 | 58,597+3.9k 字符 | 96,343 字符 | 128,880 字符（≈3.7 万 token） |
+| 运行所需 Node | ≥22.19 | ≥22.19 | **≥24.22.1（插件自带 24.22.3）** |
+
+6.7.0 → 6.9.0 新增的 48 个工具：构建/环境取证（`start_build_computer` 一族 10 个）、
+分析与工作流（`guided_workflows`、`search_guidance`、`update_analysis_settings` 等 6 个）、
+对照与审计（`compare_static_and_observed_endpoints`、`audit_release_exposure`、`inspect_desktop_application`）
+以及 29 个新的静态检查器（ELF notes/unwind、PE imports/load config/certificates、NTFS journal、
+devicetree、kernel module/config、Python pyc、Erlang BEAM、il2cpp、V8 code cache、GPU code objects、
+APK signature、Android JNI、Apple IPS、model artifact、byte entropy、binary hardening、API contract、
+Playwright trace、Windows shortcut、bundle resources 等）。**没有任何工具被删除**。
 
 ### 8.4 对插件的影响
 
-- 补丁、`rea-linux` 行、三个配置脚本（Windows / macOS-Linux / WSL）的版本钉扎全部同步到 6.7.0；
-- 启动器新增 `REA_MCP_NODE`（第 2 层用哪个 node）作为逃生口：
-  有 ≥24.22.1 的 Node 时设 `REA_MCP_NODE` + `REA_MCP_VERSION=6.9.0` 即可跑上游最新版；
+- 补丁、`rea-linux` 行、四个脚本（Windows / macOS-Linux / WSL 引导 / WSL 内工具链）的钉扎同步到 **6.9.0**；
+- 启动器新增 **Node 选择与自动回退**（见 8.2），日志行会带 `ver=… node=provisioned(24.22.3)`
+  或 `fallback-from=6.9.0-node-too-old`；
 - 前 7 节关于 `dsh-mcp-client` / `dsh-app-boot` 的结论**不受影响**（那是 DSH 侧，与 REA 版本无关）。

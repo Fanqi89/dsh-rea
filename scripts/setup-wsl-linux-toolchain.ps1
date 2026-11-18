@@ -143,8 +143,8 @@ Write-Info '      disabled: true          # 把这里改成 false 并重启 Harn
 Write-Info '      config:'
 Write-Info '        serverName: rea-linux'
 Write-Info "        command: wsl.exe"
-Write-Info "        args: ['-d', '$Distribution', '-u', 'root', '--', 'npx', '-y', 'rea-agents@6.7.0', 'mcp']"
+Write-Info "        args: ['-d', '$Distribution', '-u', 'root', '--', 'npx', '-y', 'rea-agents@6.9.0', 'mcp']"
 Write-Info ''
-Write-Info '启用后 Linux 专属工具会以 mcp__rea-linux__* 出现（约 207 个，token 成本翻倍，按需开启）。'
+Write-Info '启用后 Linux 专属工具会以 mcp__rea-linux__* 出现（约 255 个，token 成本翻倍，按需开启）。'
 
 Write-Host "`n完成。若刚启用 WSL 功能，请先重启 Windows，再运行一次本脚本。`n" -ForegroundColor Yellow

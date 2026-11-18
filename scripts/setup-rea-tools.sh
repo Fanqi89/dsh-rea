@@ -35,8 +35,17 @@
 
 set -euo pipefail
 
-REA_VERSION="6.7.0"
+REA_VERSION="6.9.0"
 REA_PKG="rea-agents@${REA_VERSION}"
+
+# rea-agents 6.9.0 engines: ^22.23.4 || ^24.22.1 || >=26.12.1, while DSH ships
+# Node 24.21.0 - just short. The launcher prefers a private Node in
+# $HOME/.rea/dsh/node, so this script downloads one (SHA-256 verified against the
+# official SHASUMS256.txt) unless --skip-node is given.
+REA_NODE_VERSION="v24.22.3"
+REA_NODE_DIR="$HOME/.rea/dsh/node"
+REA_NODE_BIN="$REA_NODE_DIR/bin/node"
+REA_NODE_STAMP="$REA_NODE_DIR/version.txt"
 
 # Release asset names verified live on 2026-11-07 (see docs/SETUP-POSIX.md):
 #   ghidra_12.1.4_PUBLIC_20260921.zip -> HTTP 200 (20250826 -> HTTP 404)
@@ -60,6 +69,7 @@ SKIP_JADX=0
 SKIP_ADB=0
 SKIP_APKTOOL=0
 SKIP_AGENTS=0
+SKIP_NODE=0
 WITH_TOGGLE=0
 TOOLS_ROOT="${REA_TOOLS_ROOT:-$HOME/.rea/tools}"
 APKTOOL_JAR_OPT=""
@@ -135,6 +145,9 @@ OPTIONS
   --skip-apktool       Do not write the apktool wrapper.
   --skip-agents        Do not provision the pinned REA MCP install (layer 2);
                        the launcher then falls back to npx.
+  --skip-node          Do not provision the private Node runtime (layer 2 needs
+                       Node >= 24.22.1 for rea-agents 6.9.0; without it the
+                       launcher falls back to the 6.7.0 install).
   --with-toggle        Run 8b: append an id-targeted `rea-mcp` override to the
                        profile patch so phoushen/dsh-rea-toggle can switch REA
                        on/off from the composer (idempotent, keeps a .bak).
@@ -148,9 +161,12 @@ WHAT IT DOES (in order)
   5. adb (Android platform-tools) detection.
   6. apktool: write an executable POSIX wrapper for REA_APKTOOL_COMMAND.
   7. Chrome / Chromium detection for the browser lane.
-  8. Pinned REA MCP install (npm --prefix ~/.rea/dsh/agents/6.7.0).
+  8. Pinned REA MCP install (npm --prefix ~/.rea/dsh/agents/6.9.0).
   8b. Optional (--with-toggle): wire the composer REA on/off switch by adding an
       id-targeted `rea-mcp` override to the profile patch (see docs/TOGGLE.md).
+  8c. Private Node runtime (~/.rea/dsh/node, v24.22.3): rea-agents 6.9.0 refuses
+      Node < 24.22.1 and DSH bundles 24.21.0 (--skip-node to skip; the launcher
+      then falls back to the 6.7.0 install).
   9. Summary: copy-pasteable exports, how to make them reach DSH, and the
      JSON-RPC probe that proves the server is reachable.
 
@@ -403,6 +419,7 @@ while [ $# -gt 0 ]; do
     --skip-adb) SKIP_ADB=1 ;;
     --skip-apktool) SKIP_APKTOOL=1 ;;
     --skip-agents) SKIP_AGENTS=1 ;;
+    --skip-node) SKIP_NODE=1 ;;
     --with-toggle) WITH_TOGGLE=1 ;;
     --tools-root)
       if [ $# -lt 2 ]; then die "--tools-root needs a directory"; fi
@@ -1021,6 +1038,69 @@ if [ "$WITH_TOGGLE" -eq 1 ]; then
     fi
   fi
   log_info "the flag is written immediately; the tool set changes on the next Harness start"
+fi
+
+# --------------------------------------- 8c. REA Node runtime (optional) -----
+# rea-agents 6.9.0 engines are ^22.23.4 || ^24.22.1 || >=26.12.1 and it refuses
+# to start otherwise; DSH bundles Node 24.21.0. Layer 2 therefore gets its own
+# Node under ~/.rea/dsh/node, which the launcher prefers. Without it the launcher
+# falls back to the 6.7.0 install (see the patch header comment).
+if [ "$SKIP_NODE" -eq 0 ]; then
+  step "8c REA Node runtime ($REA_NODE_VERSION; 6.9.0 needs Node >= 24.22.1)"
+  NODE_OS=""
+  NODE_ARCH=""
+  case "$OS_KIND" in
+    macos) NODE_OS="darwin" ;;
+    linux) NODE_OS="linux" ;;
+    *) NODE_OS="" ;;
+  esac
+  case "$ARCH" in
+    x86_64 | amd64) NODE_ARCH="x64" ;;
+    arm64 | aarch64) NODE_ARCH="arm64" ;;
+    *) NODE_ARCH="" ;;
+  esac
+  if [ -z "$NODE_OS" ] || [ -z "$NODE_ARCH" ]; then
+    log_skip "unsupported platform/arch ($OS_KIND/$ARCH); the launcher will fall back to 6.7.0"
+  elif [ -x "$REA_NODE_BIN" ] && [ -f "$REA_NODE_STAMP" ] && [ "$(cat "$REA_NODE_STAMP")" = "$REA_NODE_VERSION" ]; then
+    log_ok "present: $REA_NODE_BIN ($REA_NODE_VERSION)"
+  elif [ "$DRY_RUN" -eq 1 ]; then
+    log_info "would download node-$REA_NODE_VERSION-$NODE_OS-$NODE_ARCH.tar.gz into $REA_NODE_DIR"
+  else
+    NODE_TARBALL="node-$REA_NODE_VERSION-$NODE_OS-$NODE_ARCH.tar.gz"
+    NODE_BASE="https://nodejs.org/dist/$REA_NODE_VERSION"
+    TMP_NODE=$(mktemp -d "${TMPDIR:-/tmp}/rea-node.XXXXXX")
+    NODE_OK=0
+    if curl -fsSL "$NODE_BASE/$NODE_TARBALL" -o "$TMP_NODE/$NODE_TARBALL" &&
+      curl -fsSL "$NODE_BASE/SHASUMS256.txt" -o "$TMP_NODE/SHASUMS256.txt"; then
+      WANT_SHA=$(grep -E "[[:space:]]$NODE_TARBALL\$" "$TMP_NODE/SHASUMS256.txt" | awk '{print $1}' | head -n1)
+      GOT_SHA=$(sha256_of "$TMP_NODE/$NODE_TARBALL" || true)
+      if [ -n "$WANT_SHA" ] && [ -n "$GOT_SHA" ] && [ "$(lower "$GOT_SHA")" = "$(lower "$WANT_SHA")" ]; then
+        mkdir -p "$REA_NODE_DIR"
+        if tar -xzf "$TMP_NODE/$NODE_TARBALL" -C "$TMP_NODE"; then
+          INNER="$TMP_NODE/node-$REA_NODE_VERSION-$NODE_OS-$NODE_ARCH"
+          if [ -x "$INNER/bin/node" ]; then
+            cp -R "$INNER"/. "$REA_NODE_DIR"/
+            printf '%s\n' "$REA_NODE_VERSION" >"$REA_NODE_STAMP"
+            NODE_OK=1
+            log_ok "installed: $("$REA_NODE_BIN" --version 2>/dev/null || printf '%s' "$REA_NODE_VERSION") -> $REA_NODE_DIR"
+            log_info "the launcher prefers it; REA_MCP_NODE overrides, REA_MCP_VERSION pins"
+          else
+            log_warn "unexpected archive layout: $INNER"
+          fi
+        else
+          log_warn "tar failed on $NODE_TARBALL"
+        fi
+      else
+        log_warn "SHA-256 mismatch for $NODE_TARBALL (want ${WANT_SHA:-?} got ${GOT_SHA:-?})"
+      fi
+    else
+      log_warn "download failed: $NODE_BASE/$NODE_TARBALL"
+    fi
+    rm -rf "$TMP_NODE"
+    if [ "$NODE_OK" -eq 0 ]; then
+      log_hint "no private Node installed; with DSH's bundled Node < 24.22.1 the launcher falls back to 6.7.0"
+    fi
+  fi
 fi
 
 # ------------------------------------------------------- 9. summary -------

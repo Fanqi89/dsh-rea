@@ -8,7 +8,7 @@
 
 | 能力 | macOS | Linux | 依赖 / 说明 |
 |---|---|---|---|
-| **MCP 服务器本体**（207 个 `mcp__rea__*` 工具：静态 JS/Electron/ASAR、.NET、PE 资源、通用归档、EVM、证据体系） | 可用 | 可用 | 只要 Node ≥ 22.19；脚本第 8 步会把 pinned 本地安装装好 |
+| **MCP 服务器本体**（255 个 `mcp__rea__*` 工具：静态 JS/Electron/ASAR、.NET、PE 资源、通用归档、EVM、证据体系） | 可用 | 可用 | 只要 Node ≥ 22.19；脚本第 8 步会把 pinned 本地安装装好 |
 | **Ghidra 原生线**（伪代码、汇编、函数清单、xref、调用图、字符串/名称、DWARF） | 可用 | 可用 | JDK 21+ + Ghidra 12.1.4；脚本第 2/3 步 |
 | **Android 代码线**（包信息、Manifest、类清单、方法级 Java 源码、smali 回退、引用追踪） | 可用 | 可用 | JDK 21+ + JADX 0.7.1 jar；脚本第 2/4 步 |
 | **Android 资源线**（资源表、资源解码） | 可用 | 可用 | JDK 21+ + apktool；脚本第 6 步生成 wrapper |
@@ -24,7 +24,7 @@
 
 | 项目 | 要求 | 说明 |
 |---|---|---|
-| Node.js | `^22.19.0 \|\| ^24.11.0 \|\| >=26.0.0` | 与 `rea-agents@6.7.0` 的 `engines.node` 完全一致；22.x 低于 22.19、23.x、25.x 都不满足。**注意**：REA 6.8.0+ 把下限抬到 `^22.23.4 \|\| ^24.22.1 \|\| >=26.12.1`，DSH 自带 Node 24.21.0 跑不了 6.8/6.9（会被 REA 拒绝启动）；需要时设 `REA_MCP_NODE` 指向更新的 node。**图形开关（可选）**：装 `phoushen/dsh-rea-toggle` 后用本脚本 `--with-toggle` 写 profile 覆盖行，详见 [TOGGLE.md](TOGGLE.md) |
+| Node.js | `^22.19.0 \|\| ^24.11.0 \|\| >=26.0.0` | 与 `rea-agents@6.9.0` 的 `engines.node` 完全一致；22.x 低于 22.19、23.x、25.x 都不满足。**注意**：REA 6.8.0+ 把下限抬到 `^22.23.4 \|\| ^24.22.1 \|\| >=26.12.1`，DSH 自带 Node 24.21.0 跑不了 6.8/6.9（会被 REA 拒绝启动）；需要时设 `REA_MCP_NODE` 指向更新的 node。**图形开关（可选）**：装 `phoushen/dsh-rea-toggle` 后用本脚本 `--with-toggle` 写 profile 覆盖行，详见 [TOGGLE.md](TOGGLE.md) |
 | npm | 随 Node 提供 | 第 8 步的 pinned 安装要用（`npm install --prefix`） |
 | JDK | **21+ 且是完整 JDK**（含 `javac`） | Ghidra、JADX、apktool 都需要；只有 JRE 时脚本会 `[warn]` |
 | bash | **bash 3.2 或更新**（macOS 自带就是 3.2） | 脚本刻意不用 bash 4 特性（无 associative array / `${var,,}` / `mapfile`），所以 macOS 不需要装新版 bash；`dash` 不适用，请用 `bash` 调用 |
@@ -76,15 +76,15 @@ bash scripts/setup-rea-tools.sh --skip-ghidra --skip-jadx --skip-adb --skip-apkt
 
 ```text
 1. $REA_MCP_ENTRY                                      （你自己指定时）
-2. $HOME/.rea/dsh/agents/6.7.0/node_modules/rea-agents/scripts/rea.mjs
+2. $HOME/.rea/dsh/agents/6.9.0/node_modules/rea-agents/scripts/rea.mjs
                                                        （脚本第 8 步装的就是它；用 DSH 自带 Node 启动）
-3. npx -y rea-agents@6.7.0 mcp                         （兜底：需要网络 + PATH 上有可用 Node）
+3. npx -y rea-agents@6.9.0 mcp                         （兜底：需要网络 + PATH 上有可用 Node）
 ```
 
 第 2 层是「pinned 本地安装」，脚本执行的就是：
 
 ```bash
-npm install --prefix "$HOME/.rea/dsh/agents/6.7.0" rea-agents@6.7.0 --no-audit --no-fund --loglevel=error
+npm install --prefix "$HOME/.rea/dsh/agents/6.9.0" rea-agents@6.9.0 --no-audit --no-fund --loglevel=error
 ```
 
 装完脚本会断言 `.../node_modules/rea-agents/scripts/rea.mjs` 存在，并打印它的绝对路径与已安装版本。
@@ -101,7 +101,8 @@ npm install --prefix "$HOME/.rea/dsh/agents/6.7.0" rea-agents@6.7.0 --no-audit -
 | 5 | 无（检测 `REA_ADB_PATH` 或 PATH 上的 `adb`） | — | `REA_ADB_PATH`（可选但显式） | 设备线关闭 |
 | 6 | `apktool` wrapper（`#!/bin/sh` → `exec <java> -jar <jar> "$@"`，755） | `$tools_root/apktool/apktool` | `REA_APKTOOL_COMMAND` | 资源解码关闭 |
 | 7 | 无（检测 Chrome / Chromium） | — | `REA_BROWSER_EXECUTABLE` | 浏览器线关闭 |
-| 8 | `rea-agents@6.7.0` 本地安装 | `$HOME/.rea/dsh/agents/6.7.0/` | **不需要任何变量** | 启动器回退第 3 层 `npx`（要网络） |
+| 8 | `rea-agents@6.9.0` 本地安装 | `$HOME/.rea/dsh/agents/6.9.0/` | **不需要任何变量** | 启动器回退第 3 层 `npx`（要网络） |
+| 8c | **私有 Node v24.22.3**（`--skip-node` 跳过；macOS/Linux 按 arch 取官方 tar.gz + SHASUMS256 校验） | `$HOME/.rea/dsh/node/`（含 `version.txt`） | **不需要任何变量** | 宿主 Node < 24.22.1 时启动器回退 `agents/6.7.0`（207 工具）并记 `fallback-from=…` |
 | 9 | 汇总：全部 `export` 行、环境可见性说明、验证命令 | — | — | — |
 
 **apktool 为什么要 wrapper**：REA 用 **shell-free `exec`** 启动 `REA_APKTOOL_COMMAND`
@@ -225,13 +226,13 @@ systemd user service 运行的，用 `systemctl --user set-environment JAVA_HOME
 ### 6.1 不开 DSH：直接握手（脚本末尾打印的就是这条）
 
 ```bash
-printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"0.0.0"}}}' | node "$HOME/.rea/dsh/agents/6.7.0/node_modules/rea-agents/scripts/rea.mjs" mcp
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"0.0.0"}}}' | node "$HOME/.rea/dsh/agents/6.9.0/node_modules/rea-agents/scripts/rea.mjs" mcp
 ```
 
-期望输出**一行 JSON**，其中含 `"serverInfo":{"name":"rea","version":"6.7.0"}`（下面是实跑输出，`instructions` 字段为节选）：
+期望输出**一行 JSON**，其中含 `"serverInfo":{"name":"rea","version":"6.9.0"}`（下面是 6.9.0 的实跑输出，`instructions` 字段为节选；旧版样例是 6.7.0）：
 
 ```text
-{"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":true},"completions":{},"prompts":{"listChanged":true}},"serverInfo":{"name":"rea","version":"6.7.0"},"instructions":"REA provides reverse-engineering tools ..."},"jsonrpc":"2.0","id":1}
+{"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":true},"completions":{},"prompts":{"listChanged":true}},"serverInfo":{"name":"rea","version":"6.9.0"},"instructions":"REA provides reverse-engineering tools ..."},"jsonrpc":"2.0","id":1}
 ```
 
 **第一行 JSON 就是「服务器可达」的证据**；没有任何输出说明服务器没起来（看 stderr；常见原因：入口文件不存在、Node 版本不满足、安装不完整）。
@@ -250,13 +251,13 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol
 
 | 能力 | 试这个工具 | 期望 |
 |---|---|---|
-| 工具已接入 | 让 Agent「列出你的 `mcp__rea__` 工具」/ `binary_session` | 207 个 `mcp__rea__*`，`tool_availability` 里 ghidra 可用 |
+| 工具已接入 | 让 Agent「列出你的 `mcp__rea__` 工具」/ `binary_session` | 255 个 `mcp__rea__*`，`tool_availability` 里 ghidra 可用 |
 | 原生反编译 | `open_binary` + `analyze_function` / `procedure_pseudo_code` | 伪代码 + Evidence |
 | APK 代码 | `inspect_android_package` / `inspect_android_method` | Java 源码 |
 | APK 资源 | `inspect_apktool_client` / `decode_android_resources` | apktool 版本 + 资源清单 |
 | Android 设备 | `inspect_adb_client` / `list_adb_devices` | adb 版本 + 设备列表 |
 | 浏览器 | `list_browser_targets` / `inspect_web_page` | CDP 目标列表 |
-| 引擎体检 | `npx -y rea-agents@6.7.0 doctor --json` | 各 provider 检查项转绿 |
+| 引擎体检 | `npx -y rea-agents@6.9.0 doctor --json` | 各 provider 检查项转绿 |
 
 > 注意时序：Ghidra 首次查询要导入 + 自动分析，可能几分钟（`toolCallTimeoutMs` 已放宽）；不是卡死。
 
@@ -342,7 +343,7 @@ unset GHIDRA_INSTALL_DIR REA_JADX_MCP_JAR REA_ADB_PATH REA_APKTOOL_COMMAND REA_B
 
 | 只想删 | 命令 | 影响 |
 |---|---|---|
-| pinned REA 安装 | `rm -rf "$HOME/.rea/dsh"` | 启动器回退到 `npx -y rea-agents@6.7.0 mcp`（需要网络） |
+| pinned REA 安装 | `rm -rf "$HOME/.rea/dsh"` | 启动器回退到 `npx -y rea-agents@6.9.0 mcp`（需要网络） |
 | Ghidra | `rm -rf "$HOME/.rea/tools/ghidra_12.1.4_PUBLIC"` | 原生反编译线关闭 |
 | JADX | `rm -f "$HOME/.rea/android/jadx-headless-mcp-0.7.1-all.jar"` | APK 代码反编译关闭 |
 | apktool wrapper | `rm -rf "$HOME/.rea/tools/apktool"` | APK 资源解码关闭 |

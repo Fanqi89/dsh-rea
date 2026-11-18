@@ -27,7 +27,7 @@
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-rea-tools.ps1 -DryRun
 
 # 正式执行：JDK 探测 + 浏览器 + adb + JADX + 技能 + doctor
-# （默认还会把 rea-agents 固定安装到 %USERPROFILE%\.rea\dsh\agents\6.7.0，
+# （默认还会把 rea-agents 固定安装到 %USERPROFILE%\.rea\dsh\agents\6.9.0，
 #   让插件启动走离线本地层；不想装就加 -SkipAgents）
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-rea-tools.ps1
 
@@ -40,12 +40,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-rea-tools.ps
 
 ### REA MCP 服务器本地固定安装（插件启动的 2 号层）
 
-启动器按 `$REA_MCP_ENTRY` → `%USERPROFILE%\.rea\dsh\agents\6.7.0\node_modules\rea-agents\scripts\rea.mjs`
-→ `npx -y rea-agents@6.7.0 mcp` 的顺序解析。手动准备第 2 层：
+启动器按 `$REA_MCP_ENTRY` → `%USERPROFILE%\.rea\dsh\agents\6.9.0\node_modules\rea-agents\scripts\rea.mjs`
+→ `npx -y rea-agents@6.9.0 mcp` 的顺序解析。手动准备第 2 层：
 
 ```powershell
-npm install --prefix "$env:USERPROFILE\.rea\dsh\agents\6.7.0" rea-agents@6.7.0 --no-audit --no-fund
-Test-Path "$env:USERPROFILE\.rea\dsh\agents\6.7.0\node_modules\rea-agents\scripts\rea.mjs"   # → True
+npm install --prefix "$env:USERPROFILE\.rea\dsh\agents\6.9.0" rea-agents@6.9.0 --no-audit --no-fund
+Test-Path "$env:USERPROFILE\.rea\dsh\agents\6.9.0\node_modules\rea-agents\scripts\rea.mjs"   # → True
 ```
 
 装好后启动不再需要网络与 npm/npx，冷启动也从 ~16.8 s 降到 ~5–7 s。命中哪一层写进
@@ -54,12 +54,13 @@ Test-Path "$env:USERPROFILE\.rea\dsh\agents\6.7.0\node_modules\rea-agents\script
 > **图形开关（可选）**：想给 REA 一个 ON/OFF 按钮，装 [`phoushen/dsh-rea-toggle`](https://github.com/phoushen/dsh-rea-toggle)
 > 再用本脚本的 `-WithToggle` 写 profile 覆盖行；完整步骤与本机实测见 [TOGGLE.md](TOGGLE.md)。
 
-> **版本上限（6.8.0+ 需要更新的 Node）**：REA 6.7.0 的 `engines.node` 是 `^22.19.0 || ^24.11.0 || >=26.0.0`，
-> Harness 自带的 Node 24.21.0 满足，所以本插件钉 **6.7.0**。REA **6.8.0 起**改成
-> `^22.23.4 || ^24.22.1 || >=26.12.1`，24.21.0 会被直接拒绝启动
+> **Node 运行时（脚本的第 1c 步）**：rea-agents **6.9.0** 的 `engines.node` 是
+> `^22.23.4 || ^24.22.1 || >=26.12.1`，而 Harness 自带 **Node 24.21.0** —— 差一点点就会被 REA 直接拒绝启动
 > （实测报 `REA requires Node.js … this process runs Node.js 24.21.0`）。
-> 想跑 6.8/6.9：装一个 ≥24.22.1 的 Node，设 `REA_MCP_NODE` 指向它、`REA_MCP_VERSION=6.9.0`，
-> 并在 `%USERPROFILE%\.rea\dsh\agents\6.9.0` 按上面同样命令装一份，然后重启 Harness。
+> 所以脚本会把 **Node 24.22.3** 下载到 `%USERPROFILE%\.rea\dsh\node`（SHA-256 钉扎），启动器优先用它。
+> 不想装就加 `-SkipNode`：启动器检测到 Node 太旧会自动回退到 `agents\6.7.0`（207 工具），
+> 并在 `launcher.log` 写 `fallback-from=6.9.0-node-too-old`。
+> 手上有更新的 Node（≥24.22.1）也可以直接 `REA_MCP_NODE=<path>` 指过去；`REA_MCP_VERSION` 可显式锁版本（锁了就不回退）。
 
 脚本只写**用户级**环境变量（不需要管理员），已存在且有效的值不覆盖；下载物均做 SHA-256 校验：
 
@@ -135,7 +136,7 @@ Add-Type -TypeDefinition $cs -Language CSharp -OutputAssembly C:\tools\apktool\a
 
 > 本机实测：`inspect-apktool-client` 报 `3.0.3`；`decode-android-resources` 解出完整
 > AndroidManifest、`com.llw / 1.0 / sdk16-30`、字符串 `app_name=纳西妲送你的礼物`、14 个解码文件。
-> 直接指向 `.bat` 会报 `version_unresolved`（这是 REA 6.7.0 的 Windows 启动器限制，不是配置错误）。
+> 直接指向 `.bat` 会报 `version_unresolved`（这是 REA 6.9.0 的 Windows 启动器限制，不是配置错误）。
 
 ### 2.5 浏览器
 
@@ -175,7 +176,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-wsl-linux-to
 
 WSL 内由 `scripts/linux-tools-setup.sh` 安装：`python3-pip`、`pipx` 管理的 **pwntools / binwalk /
 unblob / mitmproxy**，以及 `binutils file gdb xz-utils p7zip-full dpkg-dev`、**Node.js 22** 和
-`rea-agents 6.7.0`。发行版默认导入到 `C:\wsl\Ubuntu-24.04`，可用 `-Distribution` / `-InstallPath` 改。
+`rea-agents 6.9.0`。发行版默认导入到 `C:\wsl\Ubuntu-24.04`，可用 `-Distribution` / `-InstallPath` 改。
 
 只用 `.deb` 拆包、不装 WSL 时，Windows 侧可用 7-Zip 独立版：
 
@@ -189,16 +190,16 @@ unblob / mitmproxy**，以及 `binutils file gdb xz-utils p7zip-full dpkg-dev`�
 ## 3. 技能
 
 ```bash
-npx -y rea-agents@6.7.0 setup --skill --yes     # 装到 ~/.agents/skills/reverse-engineer-anything
-npx -y rea-agents@6.7.0 doctor --skill --json   # 期望 identity.skill.state = aligned
+npx -y rea-agents@6.9.0 setup --skill --yes     # 装到 ~/.agents/skills/reverse-engineer-anything
+npx -y rea-agents@6.9.0 doctor --skill --json   # 期望 identity.skill.state = aligned
 ```
 
 ## 4. 验证
 
 ```bash
-npx -y rea-agents@6.7.0 doctor --json      # 配置类问题看这里（改环境变量后需重启）
-npx -y rea-agents@6.7.0 providers --json   # 已配置的 provider
-npx -y rea-agents@6.7.0 capabilities --json# 每个操作的 available / 平台原因
+npx -y rea-agents@6.9.0 doctor --json      # 配置类问题看这里（改环境变量后需重启）
+npx -y rea-agents@6.9.0 providers --json   # 已配置的 provider
+npx -y rea-agents@6.9.0 capabilities --json# 每个操作的 available / 平台原因
 ```
 
 Harness 内真调用见 [CAPABILITIES.md](CAPABILITIES.md#验证清单)。

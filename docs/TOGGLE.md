@@ -1,6 +1,6 @@
 # 图形开关：`dsh-rea-toggle` × `dsh-rea`
 
-> 给 REA 的 207 个工具一个 ON/OFF 开关。开关本身是**第三方独立插件**
+> 给 REA 的 255 个工具一个 ON/OFF 开关。开关本身是**第三方独立插件**
 > [`dsh-rea-toggle`](https://github.com/phoushen/dsh-rea-toggle) ——
 > 上游仓库 **https://github.com/phoushen/dsh-rea-toggle**，作者 **phoushen**，许可 **MIT**
 > （`Copyright (c) 2026 phoushen`），本插件接入的是上游 **v1.0.0**，**不包含它的任何代码**。
@@ -8,22 +8,23 @@
 
 ## 1. 为什么值得关
 
-REA 的工具定义属于**每次请求**的系统提示，不管你调不调它。本机实测（rea-agents **6.7.0**，
-默认 `REA_MCP_INPUT_SCHEMA_PROFILE=compact`，Electron as Node 24.21.0）：
+REA 的工具定义属于**每次请求**的系统提示，不管你调不调它。本机实测（rea-agents **6.9.0**，
+默认 `REA_MCP_INPUT_SCHEMA_PROFILE=compact`，`~/.rea/dsh/node` 的 Node 24.22.3，DSH 0.2.1-rc.5）：
 
 | 测量项 | 数值 | 粗估 token（÷3.5） |
 |---|---|---|
-| 工具数 | 207 | — |
-| 工具名 + 描述（同一口径：`name` + `description` 字符数） | 96,343 字符 | **≈ 2.75 万** |
-| inputSchema 合计（compact） | 85,705 B | **≈ 2.4 万** |
-| inputSchema 合计（full，可选） | 667,642 B | ≈ 19 万 |
-| `instructions` | 952 B | ≈ 270 |
+| 工具数 | 255 | — |
+| 工具名 + 描述（同一口径：`name` + `description` 字符数） | 128,880 字符 | **≈ 3.7 万** |
+| inputSchema 合计（compact） | 186,256 B | **≈ 5.3 万** |
+| inputSchema 合计（full，可选） | 1,021,510 B | ≈ 29 万 |
+| `instructions` | 2,604 B | ≈ 740 |
 
-也就是默认档下一轮请求里约有 **5 万 token 量级**的工具面。做逆向时值，写脚本/聊天时是死重。
+也就是默认档下一轮请求里约有 **9 万 token 量级**的工具面（6.7.0 是约 5 万）。做逆向时值，写脚本/聊天时是死重。
 开关关掉后是 0。
 
 > 上游 README 里的 229 / 14 万字符 / 4 万 token 是他们按 `rea-agents@6.8.0` 量的；
-> 本插件现在钉 6.7.0（原因见 [COMPAT-VERSIONS.md](COMPAT-VERSIONS.md) §8），所以这里用 207 的数字。
+> 本插件 v1.6.0 起钉 **6.9.0**（自带 Node 24.22.3 才能跑，原因见 [COMPAT-VERSIONS.md](COMPAT-VERSIONS.md) §8），
+> 所以这里用 255 工具 / 9 万 token 的口径。
 
 ## 2. 接线（3 步）
 
@@ -68,7 +69,7 @@ bash scripts/setup-rea-tools.sh --with-toggle
 
 | 动作 | 立刻发生 | 下次启动才发生 |
 |---|---|---|
-| 点开关 / 调端点 | profile patch 里的 `disabled:` 被改写（写盘） | 工具集合变化：ON = 207 个，OFF = 0 个 |
+| 点开关 / 调端点 | profile patch 里的 `disabled:` 被改写（写盘） | 工具集合变化：ON = 255 个，OFF = 0 个 |
 
 开关**不做**热卸载：MCP server 无法在运行时注销自己，`dsh-mcp-client` 也没有工具过滤字段。
 所以那 5 万 token 是"下次启动才真正消失"。
@@ -90,7 +91,7 @@ Invoke-RestMethod http://127.0.0.1:<PORT>/rea-toggle/set -Method POST `
 判断"关掉有没有真的省下工具"：重启后看 `~/.rea/dsh/launcher.log` 有没有新的 `launch …` 行 ——
 OFF 时**不会**有新行、也没有 `rea.mjs` 子进程；ON 时会有。
 
-## 5. 本机实测（2026-11-18，Windows + DSH 0.2.1-rc.5 + rea-agents 6.7.0）
+## 5. 本机实测（2026-11-18，Windows + DSH 0.2.1-rc.5 + rea-agents 6.9.0）
 
 - 隔离 `DSH_HOME` 下的探针 profile（`dsh-rea` + `dsh-rea-toggle` + 覆盖行）：
   - `GET /rea-toggle/status` → `{"ok":true,"rowLine":4,"enabled":true}`
@@ -125,7 +126,7 @@ OFF 时**不会**有新行、也没有 `rea.mjs` 子进程；ON 时会有。
 
 ## 8. 它做不到的
 
-- **不是工具过滤器**：`dsh-mcp-client` 没有包含性字段，所以只有"207 个"或"0 个"两种状态。
+- **不是工具过滤器**：`dsh-mcp-client` 没有包含性字段，所以只有"255 个"或"0 个"两种状态。
 - **不是热切换**：见第 3 节。
 - **不是安全边界**：它翻的是你自己本来就拥有的一个 YAML 键；端点只监听宿主回环端口，
   `POST` 的 `Origin` 与 `Host` 不一致直接 403。

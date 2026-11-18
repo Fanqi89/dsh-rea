@@ -17,15 +17,39 @@ apt-get install -y --no-install-recommends \
   dpkg-dev fakeroot build-essential libssl-dev \
   unzip tar cpio lz4 lzop squashfs-tools
 
-echo "== Node.js 22 (REA requires >= 22.19) =="
-if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 22 ]; then
-  mkdir -p /etc/apt/keyrings
-  curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key |
-    gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-  echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
-    > /etc/apt/sources.list.d/nodesource.list
-  apt-get update
-  apt-get install -y nodejs
+echo "== Node.js 24.22.3 (REA 6.9.0 requires ^22.23.4 || ^24.22.1 || >=26.12.1) =="
+node_ok() {
+  command -v node >/dev/null || return 1
+  node -e '
+    const v = process.versions.node.split(".").map(Number);
+    const ok = (v[0] === 22 && (v[1] > 23 || (v[1] === 23 && v[2] >= 4)))
+      || (v[0] === 24 && (v[1] > 22 || (v[1] === 22 && v[2] >= 1)))
+      || (v[0] >= 26 && (v[1] > 12 || (v[1] === 12 && v[2] >= 1)));
+    process.exit(ok ? 0 : 1);
+  '
+}
+if node_ok; then
+  echo "node $(node --version) already satisfies REA 6.9.0"
+else
+  NODE_VER="v24.22.3"
+  NODE_ASSET="node-$NODE_VER-linux-x64.tar.xz"
+  NODE_BASE="https://nodejs.org/dist/$NODE_VER"
+  TMP_NODE=$(mktemp -d)
+  if curl -fsSL "$NODE_BASE/$NODE_ASSET" -o "$TMP_NODE/$NODE_ASSET" &&
+    curl -fsSL "$NODE_BASE/SHASUMS256.txt" -o "$TMP_NODE/SHASUMS256.txt"; then
+    WANT=$(grep -E "[[:space:]]$NODE_ASSET\$" "$TMP_NODE/SHASUMS256.txt" | awk '{print $1}' | head -n1)
+    GOT=$(sha256sum "$TMP_NODE/$NODE_ASSET" | awk '{print $1}')
+    if [ -n "$WANT" ] && [ "$WANT" = "$GOT" ]; then
+      tar -xJf "$TMP_NODE/$NODE_ASSET" -C /usr/local --strip-components=1
+      echo "installed node $(node --version) into /usr/local"
+    else
+      echo "WARN: SHA-256 mismatch for $NODE_ASSET (want ${WANT:-?} got ${GOT:-?})"
+    fi
+  else
+    echo "WARN: could not download $NODE_BASE/$NODE_ASSET"
+  fi
+  rm -rf "$TMP_NODE"
+  node_ok || echo "WARN: node still does not satisfy REA 6.9.0; the rea-linux row will fail to start"
 fi
 
 echo "== Python analysis tools (pipx keeps them isolated) =="
@@ -36,7 +60,7 @@ for pkg in pwntools binwalk unblob mitmproxy; do
 done
 
 echo "== REA (rea-agents) for the Linux MCP instance =="
-npm install -g "rea-agents@6.7.0" || echo "WARN: rea-agents global install failed"
+npm install -g "rea-agents@6.9.0" || echo "WARN: rea-agents global install failed"
 
 echo "== versions =="
 {

@@ -53,14 +53,24 @@ param(
   [switch]$WithApktool,
   [switch]$SkipSkill,
   [switch]$SkipAgents,
+  [switch]$SkipNode,
   [switch]$WithToggle,
   [switch]$DryRun
 )
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-$ReaVersion = '6.7.0'
+$ReaVersion = '6.9.0'
 $ReaPkg = "rea-agents@$ReaVersion"
+
+# REA 6.9.0 的 engines 是 ^22.23.4 || ^24.22.1 || >=26.12.1，而 Harness 自带的是
+# Node 24.21.0 —— 差一点点。所以插件自带一份 Node 运行时（launcher 优先用它），
+# 由本脚本下载到 %USERPROFILE%\.rea\dsh\node。SHA-256 取自 nodejs.org 的 SHASUMS256.txt。
+$ReaNodeVersion = 'v24.22.3'
+$ReaNodeZipName = "node-$ReaNodeVersion-win-x64.zip"
+$ReaNodeUrl = "https://nodejs.org/dist/$ReaNodeVersion/$ReaNodeZipName"
+$ReaNodeSumsUrl = "https://nodejs.org/dist/$ReaNodeVersion/SHASUMS256.txt"
+$ReaNodeSha256 = 'e612af99f626ab415ea225af6bce5c971feb448cb5cae250bb1c3fa50c5f7d9f'
 
 $GhidraVersion = '12.1.4'
 $GhidraUrl = 'https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.4_build/ghidra_12.1.4_PUBLIC_20260921.zip'
@@ -213,7 +223,56 @@ if ($SkipAgents) {
   }
 }
 
-# -------------------------------------------- 1c. 图形开关（可选，dsh-rea-toggle）
+# --------------------------------------- 1c. REA Node 运行时（6.9.0 需要 ≥24.22.1）
+# Harness 自带 Node 24.21.0，而 rea-agents 6.9.0 的 engines 是
+# ^22.23.4 || ^24.22.1 || >=26.12.1 —— 差一点点就会被 REA 直接拒绝启动。
+# 这里把 Node $ReaNodeVersion 解压到 %USERPROFILE%\.rea\dsh\node（launcher 优先用它），
+# 并写 version.txt 供 launcher 判断；旧版 Node 会在启动器里自动回退到 6.7.0。
+$reaNodeDir = Join-Path $ReaHome 'node'
+$reaNodeExe = Join-Path $reaNodeDir 'node.exe'
+$reaNodeStamp = Join-Path $reaNodeDir 'version.txt'
+Write-Step "REA Node 运行时（$ReaNodeVersion，6.9.0 要求 Node ≥24.22.1）"
+if ($SkipNode) {
+  Write-Warn2 '跳过 Node 运行时（-SkipNode）；若 Harness 自带 Node < 24.22.1，启动器会回退到 6.7.0'
+} elseif ((Test-Path -LiteralPath $reaNodeExe) -and (Test-Path -LiteralPath $reaNodeStamp) -and ((([IO.File]::ReadAllText($reaNodeStamp)).Trim() -eq $ReaNodeVersion))) {
+  Write-Ok "已存在：$reaNodeExe（$((([IO.File]::ReadAllText($reaNodeStamp))).Trim())）"
+} elseif ($DryRun) {
+  Write-Info "would download $ReaNodeUrl and extract into $reaNodeDir (sha256 $($ReaNodeSha256.Substring(0,12))…)"
+} else {
+  New-Item -ItemType Directory -Force -Path $reaNodeDir | Out-Null
+  $zip = Join-Path $env:TEMP $ReaNodeZipName
+  if (-not (Test-Path -LiteralPath $zip)) {
+    Write-Info "下载：$ReaNodeUrl"
+    Invoke-Native 'curl.exe' @('--ssl-no-revoke', '-sS', '-L', $ReaNodeUrl, '-o', $zip) | Out-Null
+  }
+  if (-not (Test-Path -LiteralPath $zip)) {
+    Write-Warn2 "下载失败；Harness 自带 Node < 24.22.1 时启动器会回退到 6.7.0"
+  } else {
+    $actual = (Get-FileHash -Algorithm SHA256 -Path $zip).Hash.ToLower()
+    if ($actual -ne $ReaNodeSha256) {
+      Write-Warn2 "SHA-256 不匹配（期望 $($ReaNodeSha256.Substring(0,16))…，实际 $($actual.Substring(0,16))…）；删除并放弃"
+      Remove-Item -LiteralPath $zip -Force
+    } else {
+      $stage = Join-Path $env:TEMP "rea-node-$ReaNodeVersion"
+      Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+      New-Item -ItemType Directory -Force -Path $stage | Out-Null
+      Expand-ZipFast -ZipPath $zip -Destination $stage
+      $inner = Join-Path $stage "node-$ReaNodeVersion-win-x64"
+      if (Test-Path -LiteralPath (Join-Path $inner 'node.exe')) {
+        Get-ChildItem -LiteralPath $inner -Force | ForEach-Object { Copy-Item -Recurse -Force $_.FullName (Join-Path $reaNodeDir $_.Name) }
+        [IO.File]::WriteAllText($reaNodeStamp, "$ReaNodeVersion`n", (New-Object Text.UTF8Encoding($false)))
+        $verOut = (Invoke-Native $reaNodeExe @('--version')).Trim()
+        Write-Ok "Node $verOut → $reaNodeDir"
+        Write-Info 'launcher 会优先使用它；REA_MCP_NODE 可覆盖，REA_MCP_VERSION 可锁版本'
+      } else {
+        Write-Warn2 "解压后找不到 node.exe（zip 布局变了？）：$inner"
+      }
+      Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+    }
+  }
+}
+
+# -------------------------------------------- 1d. 图形开关（可选，dsh-rea-toggle）
 # 上游插件 phoushen/dsh-rea-toggle 在输入框下方加 REA ON/OFF 开关，翻的是 profile patch 里
 # id=rea-mcp 那一行的 disabled。dsh-rea 的 rea-mcp 行来自 bundle 层，开关只读用户 patch 层，
 # 所以要在 profile patch 里放一个「按 id 覆盖」的条目，开关才找得到目标。
