@@ -50,10 +50,11 @@
 # tools do not show up. On Windows that file also records spawn errors that the
 # MCP client only reports as an absent server.
 #
-# Companion plugin (optional): phoushen/dsh-rea-toggle (MIT) puts an ON/OFF chip
-# in the composer and rewrites `disabled` on the row with id `rea-mcp` - but only
-# inside the USER patch layer. This row is inserted from the bundle layer, so the
-# switch needs an id-targeted override in the profile patch
+# Companion plugin (optional): dsh-rea-toggle - a third-party MIT plugin by phoushen,
+# upstream https://github.com/phoushen/dsh-rea-toggle (v1.0.0; dsh-rea vendors none of
+# its code). It puts an ON/OFF chip in the composer and rewrites `disabled` on the row
+# with id `rea-mcp` - but only inside the USER patch layer. This row is inserted from
+# the bundle layer, so the switch needs an id-targeted override in the profile patch
 # (`- id: rea-mcp` + `disabled: false`; scripts/setup-rea-tools.ps1 -WithToggle or
 # setup-rea-tools.sh --with-toggle adds it). Without that override the switch shows
 # "REA ?" and this row simply stays on. Details: docs/TOGGLE.md.

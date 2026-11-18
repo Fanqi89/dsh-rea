@@ -1,8 +1,10 @@
 # 图形开关：`dsh-rea-toggle` × `dsh-rea`
 
-> 给 REA 的 207 个工具一个 ON/OFF 开关。开关本身是独立插件
-> [`phoushen/dsh-rea-toggle`](https://github.com/phoushen/dsh-rea-toggle)（MIT），
-> 本页讲的是**它和 dsh-rea 怎么接**，以及接歪了怎么排。
+> 给 REA 的 207 个工具一个 ON/OFF 开关。开关本身是**第三方独立插件**
+> [`dsh-rea-toggle`](https://github.com/phoushen/dsh-rea-toggle) ——
+> 上游仓库 **https://github.com/phoushen/dsh-rea-toggle**，作者 **phoushen**，许可 **MIT**
+> （`Copyright (c) 2026 phoushen`），本插件接入的是上游 **v1.0.0**，**不包含它的任何代码**。
+> 完整的来源/作者核对见第 9 节。本页讲的是**它和 dsh-rea 怎么接**，以及接歪了怎么排。
 
 ## 1. 为什么值得关
 
@@ -128,7 +130,21 @@ OFF 时**不会**有新行、也没有 `rea.mjs` 子进程；ON 时会有。
 - **不是安全边界**：它翻的是你自己本来就拥有的一个 YAML 键；端点只监听宿主回环端口，
   `POST` 的 `Origin` 与 `Host` 不一致直接 403。
 
-## 9. 归属
+## 9. 上游来源与作者
 
-- 开关插件：`phoushen/dsh-rea-toggle`，MIT，作者 phoushen；本插件**不包含它的代码**，只做接线与文档。
-- REA：`morluto/rea`，MIT。DeepSeek Harness 是独立产品，本插件非官方。
+| 项目 | 内容 |
+|---|---|
+| 上游项目 | `dsh-rea-toggle` —— 给 DeepSeek Harness 里的 REA MCP 服务器一个图形开关 |
+| **上游仓库** | **https://github.com/phoushen/dsh-rea-toggle**（`git clone https://github.com/phoushen/dsh-rea-toggle.git`） |
+| **作者** | **phoushen**（GitHub 用户 `phoushen`；上游 `package.json` 的 `"author": "phoushen"`，`LICENSE` 版权行 `Copyright (c) 2026 phoushen`，仓库创建者与全部提交者都是该账号） |
+| **许可** | **MIT**（Copyright (c) 2026 phoushen），全文见上游仓库 `LICENSE` |
+| 本插件接入的版本 | **v1.0.0**（`dsh plugin --profile <p> add github:phoushen/dsh-rea-toggle` 装入时为 1.0.0） |
+| 上游时间线 | 仓库创建 2026-10-27T12:14Z，同日收敛到 HEAD `2ef56ba`（`docs: add GUI screenshots (on/off) and a video walkthrough link`） |
+| dsh-rea 对上游的改动 | **零改动**：不 vendor、不 fork、不打 patch；只补 profile patch 的接线条目、脚本与文档 |
+| 升级方式 | 上游更新后重跑一次 `dsh plugin --profile <p> add github:phoushen/dsh-rea-toggle` 并重启 Harness |
+| 本机出处核对 | `%USERPROFILE%\.dsh\profiles\<p>\node_modules\dsh-rea-toggle\package.json` 的 `repository.url` / `author`，同目录 `LICENSE` 首行 |
+| 免责声明 | 非官方：与 REA（[morluto/rea](https://github.com/morluto/rea)，MIT）和 DeepSeek Harness 均无隶属关系 |
+
+- REA 本体：`morluto/rea`，MIT —— dsh-rea 只是它的 MCP 桥。
+- 开关插件：`phoushen/dsh-rea-toggle`，MIT，作者 **phoushen** —— 本插件**不包含它的代码**，只做接线与文档。
+- 若上游仓库迁移/改名，请以上游 `package.json` 的 `repository` 字段为准；本页链接指向 2026-10-27 时的上游地址。

@@ -9,6 +9,51 @@ dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.1.0
 
 ---
 
+## v1.5.2 — 2026-11-18
+
+**主题：把 `dsh-rea-toggle` 的上游来源与作者写清楚（纯文档/注释，运行时零改动）。**
+
+### 上游客体的身份（本版新增的显式标注）
+
+| 项目 | 内容 |
+|---|---|
+| 上游项目 | `dsh-rea-toggle` —— 给 DeepSeek Harness 里的 REA MCP 服务器一个图形开关 |
+| **上游仓库** | **https://github.com/phoushen/dsh-rea-toggle** |
+| **作者** | **phoushen**（GitHub 用户 phoushen；上游 `package.json` 的 `"author": "phoushen"`，`LICENSE` 版权行 `Copyright (c) 2026 phoushen`，仓库创建者与全部提交者均为该账号） |
+| **许可** | **MIT**（Copyright (c) 2026 phoushen） |
+| 本插件接入的版本 | **v1.0.0**（`github:phoushen/dsh-rea-toggle` 装入时为 1.0.0） |
+| 上游时间线 | 仓库创建 2026-10-27T12:14Z，同日收敛到 HEAD `2ef56ba` |
+| dsh-rea 对上游的改动 | **零**：不 vendor、不 fork、不打 patch；只做 profile patch 接线、脚本与文档 |
+
+### 变更
+
+- **README**「图形开关」小节顶部新增「上游来源与作者」引用块：仓库 URL、作者 phoushen、MIT、
+  接入版本 v1.0.0、"不含其代码"。
+- **`docs/TOGGLE.md`**：页首注明上游身份；第 9 节由一句话扩成**来源与作者核对表**
+  （仓库 / 作者 / 许可 / 接入版本 / 上游时间线 / 零改动声明 / 升级方式 / 本机出处核对路径 / 免责声明），
+  并说明"若上游迁移以 `package.json` 的 `repository` 为准"。
+- **`cordis.patch.yml`** 头部注释：写明 `dsh-rea-toggle` 是"a third-party MIT plugin by phoushen"、
+  上游 URL 与版本、dsh-rea 不包含其代码。
+- `package.json` / `dsh.plugin.json` 版本 1.5.1 → 1.5.2。
+
+### 验证
+
+- 出处逐项核对（2026-11-18）：`GET /repos/phoushen/dsh-rea-toggle` → `owner.login=phoushen`、
+  `license.spdx_id=MIT`、`created_at=2026-10-27T12:14:11Z`；RAW `LICENSE` 首行 `MIT License`、
+  第三行 `Copyright (c) 2026 phoushen`；RAW `package.json` `"author": "phoushen"`；
+  commits API 三条最近提交的 `author.login` 均为 `phoushen`。
+- 本机已装实例：`~/.dsh/profiles/desktop/node_modules/dsh-rea-toggle/package.json` 的
+  `repository.url` = `git+https://github.com/phoushen/dsh-rea-toggle.git`，`version` = `1.0.0`，
+  同目录 `LICENSE` 为 MIT。
+- `cordis.patch.yml` 重新生成后 6,393 字符注释 + 两行 entry，折叠往返 1,900 B 逐字节一致、
+  schema 校验两条 entry 均 OK；JSON 均可解析且无 BOM。
+
+### 说明
+
+运行时与 v1.5.1 完全一致（补丁只有注释变化），不需要为了本版重装开关或改 profile。
+
+---
+
 ## v1.5.1 — 2026-11-18
 
 **主题：接入图形开关 —— 让 [`phoushen/dsh-rea-toggle`](https://github.com/phoushen/dsh-rea-toggle)

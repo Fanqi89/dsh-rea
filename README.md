@@ -101,12 +101,18 @@ dsh plugin --profile "$env:DSH_PROFILE" add "X:\path\to\dsh-rea"
 
 ## 图形开关（可选，推荐）：配合 `dsh-rea-toggle`
 
+> **上游来源与作者**：开关是第三方插件 **`dsh-rea-toggle`** ——
+> 上游仓库 **<https://github.com/phoushen/dsh-rea-toggle>**，作者 **phoushen**，
+> 许可 **MIT**（`Copyright (c) 2026 phoushen`），本插件接入的是上游 **v1.0.0**。
+> dsh-rea **不包含它的任何代码**（不 vendor / 不 fork / 不打 patch），只负责接线、脚本与文档；
+> 完整核对表见 [docs/TOGGLE.md](docs/TOGGLE.md) 第 9 节。
+
 REA 的 207 个工具在**每一轮请求**里都要带 schema。实测（rea-agents 6.7.0、默认 compact）：
 工具名 + 描述 **96,343 字符 ≈ 2.75 万 token**，inputSchema 另 **85,705 B ≈ 2.4 万 token** ——
 做逆向时这笔开销很值，写脚本、聊天时就是死重。
 
-[`phoushen/dsh-rea-toggle`](https://github.com/phoushen/dsh-rea-toggle)（MIT，独立插件）在输入框
-下方加一枚 `REA ON / REA OFF` 开关，翻的就是我们这行 `rea-mcp` 的 `disabled` 标志：
+上游插件 [`phoushen/dsh-rea-toggle`](https://github.com/phoushen/dsh-rea-toggle)（作者 phoushen，MIT）
+在输入框下方加一枚 `REA ON / REA OFF` 开关，翻的就是我们这行 `rea-mcp` 的 `disabled` 标志：
 
 ```powershell
 # 1) 装开关插件
@@ -256,7 +262,11 @@ Harness 关闭时 Windows 用 `taskkill /T /F`、POSIX 用进程组 `SIGTERM`（
 
 完整的「每个版本做了什么、修了什么、怎么验证」见 **[CHANGELOG.md](CHANGELOG.md)**；摘要：
 
-- **v1.5.1**（当前）：接入图形开关 [`phoushen/dsh-rea-toggle`](https://github.com/phoushen/dsh-rea-toggle)
+- **v1.5.2**（当前）：把上游开关插件 **`dsh-rea-toggle`** 的来源与作者写清楚——
+  上游仓库 <https://github.com/phoushen/dsh-rea-toggle>、作者 **phoushen**、MIT（`Copyright (c) 2026 phoushen`）、
+  接入版本 **v1.0.0**，dsh-rea **不含其代码**；README / [docs/TOGGLE.md](docs/TOGGLE.md) / 补丁注释三处标注。
+  **运行时与 v1.5.1 完全一致**。
+- **v1.5.1**：接入图形开关 [`phoushen/dsh-rea-toggle`](https://github.com/phoushen/dsh-rea-toggle)
   （MIT，独立插件）——输入框下方一枚 `REA ON/OFF`，关掉就是 0 个工具、不再付每轮约 5 万 token 的
   工具面开销。dsh-rea 这边补上它缺的那一环：`rea-mcp` 行来自 bundle 层，开关只改用户 patch 层，
   所以要有 `- id: rea-mcp` 覆盖条目（新增 `-WithToggle` / `--with-toggle` 一键写、会备份并回读校验）。
@@ -299,10 +309,11 @@ Harness 关闭时 Windows 用 `taskkill /T /F`、POSIX 用进程组 `SIGTERM`（
 - **v1.0.1**：单行 + Node 启动器；修复旧构建下第二条平台行显示「异常」的问题。
 - **v1.0.0**：双行 + `disabled: !!js`（在较旧 Harness 上可能出现 1 运行中 / 1 异常）。
 
-九个标签可共存、互不冲突；任意版本都能按标签锁装：
+十个标签可共存、互不冲突；任意版本都能按标签锁装：
 
 ```powershell
-dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.5.1   # 最新（图形开关接线 + 文档）
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.5.2   # 最新（上游开关来源/作者标注）
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.5.1   # 图形开关接线 + 文档
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.5.0   # REA 6.7.0，207 工具
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.4.1   # 文档/徽章；运行时同 v1.4.0（REA 6.4.0，170 工具）
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.4.0   # 跨版本/跨平台稳定性
