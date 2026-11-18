@@ -66,6 +66,16 @@
 # setup-rea-tools.sh --with-toggle adds it). Without that override the switch shows
 # "REA ?" and this row simply stays on. Details: docs/TOGGLE.md.
 #
+# Why the launcher is a stdio proxy (not a plain spawn): 15 of REA 6.9.0's input
+# schemas carry a 'pattern' that rejects lone UTF-16 surrogates, written with
+# backslash-u escapes for the D800-DFFF range. DSH refuses that value while building
+# a function schema, so the call fails with 'Invalid schema for function
+# mcp__rea__binary_session: ... is not a regex'; 6.7.0 had no escaped pattern (162
+# pattern fields, none with escapes) and worked. The launcher therefore pipes
+# stdin/stdout, deletes only those 'pattern' keys from a tools/list result (86 of the
+# 101 pattern fields survive), and records the count in launcher.log. Every other
+# byte of the JSON-RPC stream passes through untouched.
+#
 # Knobs:
 # - env REA_MCP_INPUT_SCHEMA_PROFILE=compact advertises smaller input schemas -
 #   and since 6.9.0 compact is REA's own default (255 tools: compact input
@@ -106,34 +116,65 @@
         args:
           - '-e'
           - >-
-            const{spawn}=require('node:child_process'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');const
-            win=process.platform==='win32',home=process.env.REA_MCP_HOME||path.join(os.homedir(),'.rea','dsh');const
-            isFile=p=>{try{return fs.statSync(p).isFile()}catch{return false}};const
-            log=m=>{try{fs.mkdirSync(home,{recursive:true});const
-            f=path.join(home,'launcher.log');try{if(fs.statSync(f).size>65536)fs.truncateSync(f,0)}catch{}fs.appendFileSync(f,new
-            Date().toISOString()+' node='+process.versions.node+'
-            electron='+(process.versions.electron||'-')+' '+m+'\n')}catch{}};const
-            env=Object.assign({},process.env,{ELECTRON_RUN_AS_NODE:'1'});const okNode=v=>{const
-            m=/^(\d+)\.(\d+)\.(\d+)/.exec(v||'');if(!m)return false;const
-            a=+m[1],b=+m[2],c=+m[3];return(a===22&&(b>23||(b===23&&c>=4)))||(a===24&&(b>22||(b===22&&c>=1)))||(a>=26&&(b>12||(b===12&&c>=1)))};const
-            needNew=v=>{const m=/^(\d+)\.(\d+)/.exec(v||'');return
-            m?(+m[1]>6||(+m[1]===6&&+m[2]>=8)):false};let
-            nodeExe=process.execPath,nodeVer=process.versions.node,nodeHow='runtime',nodeOk=okNode(nodeVer);const
-            prov=path.join(home,'node',win?'node.exe':path.join('bin','node'));if(process.env.REA_MCP_NODE&&isFile(process.env.REA_MCP_NODE)){nodeExe=process.env.REA_MCP_NODE;nodeHow='env';nodeVer='?';nodeOk=true}else
-            if(isFile(prov)){nodeExe=prov;nodeHow='provisioned';try{nodeVer=fs.readFileSync(path.join(home,'node','version.txt'),'utf8').trim().replace(/^v/,'');nodeOk=okNode(nodeVer)}catch{nodeVer='?';nodeOk=true}}let
-            V=process.env.REA_MCP_VERSION||'6.9.0',fallback='';if(!process.env.REA_MCP_ENTRY&&!process.env.REA_MCP_VERSION&&needNew(V)&&nodeOk===false&&isFile(path.join(home,'agents','6.7.0','node_modules','rea-agents','scripts','rea.mjs'))){fallback=V;V='6.7.0'}const
-            entry=process.env.REA_MCP_ENTRY||path.join(home,'agents',V,'node_modules','rea-agents','scripts','rea.mjs');let
-            cmd,args,how;if(isFile(entry)){cmd=nodeExe;args=[entry,'mcp'];how='local-install'}else
-            if(win){cmd=process.env.ComSpec||'cmd.exe';args=['/d','/s','/c','npx','-y','rea-agents@'+V,'mcp'];how='npx'}else{cmd='npx';args=['-y','rea-agents@'+V,'mcp'];how='npx'}log('launch
-            '+how+' ver='+V+' node='+nodeHow+'('+nodeVer+') cmd='+cmd+'
-            args='+JSON.stringify(args)+(fallback?' fallback-from='+fallback+'-node-too-old':''));const
-            child=spawn(cmd,args,{stdio:'inherit',windowsHide:true,detached:!win,env:env});let
-            closed=false;const
-            stop=()=>{if(closed)return;closed=true;try{if(win){spawn('taskkill',['/pid',String(child.pid),'/T','/F'],{stdio:'ignore',windowsHide:true})}else{process.kill(-child.pid,'SIGTERM');setTimeout(()=>{try{process.kill(-child.pid,'SIGKILL')}catch{}},1200)}}catch{}};for(const
-            s of ['SIGTERM','SIGINT','SIGHUP'])process.on(s,stop);child.on('error',e=>{log('spawn error
-            '+(e.code||'')+' '+e.message);process.stderr.write('[dsh-rea] cannot start the REA MCP server
-            ('+how+'): '+e.message+'\n');process.exit(1)});child.on('exit',(c,s)=>{closed=true;log('server
-            exit code='+c+' signal='+s);process.exit(c===null?(s?1:0):c)});
+            const {spawn} = require('node:child_process'); const fs = require('node:fs'); const path =
+            require('node:path'); const os = require('node:os'); const {StringDecoder} =
+            require('node:string_decoder'); const win = process.platform === 'win32'; const home =
+            process.env.REA_MCP_HOME || path.join(os.homedir(), '.rea', 'dsh'); const isFile = (p) => { try
+            { return fs.statSync(p).isFile(); } catch { return false; } }; const log = (m) => { try {
+            fs.mkdirSync(home, {recursive: true}); const f = path.join(home, 'launcher.log'); try { if
+            (fs.statSync(f).size > 65536) fs.truncateSync(f, 0); } catch {} fs.appendFileSync(f, new
+            Date().toISOString() + ' node=' + process.versions.node + ' electron=' +
+            (process.versions.electron || '-') + ' ' + m + '\n'); } catch {} }; const env =
+            Object.assign({}, process.env, {ELECTRON_RUN_AS_NODE: '1'}); const okNode = (v) => { const m =
+            /^(\d+)\.(\d+)\.(\d+)/.exec(v || ''); if (!m) return false; const a = +m[1], b = +m[2], c =
+            +m[3]; return (a === 22 && (b > 23 || (b === 23 && c >= 4))) || (a === 24 && (b > 22 || (b ===
+            22 && c >= 1))) || (a >= 26 && (b > 12 || (b === 12 && c >= 1))); }; const needNew = (v) => {
+            const m = /^(\d+)\.(\d+)/.exec(v || ''); return m ? (+m[1] > 6 || (+m[1] === 6 && +m[2] >= 8)) :
+            false; }; let nodeExe = process.execPath, nodeVer = process.versions.node, nodeHow = 'runtime',
+            nodeOk = okNode(nodeVer); const prov = path.join(home, 'node', win ? 'node.exe' :
+            path.join('bin', 'node')); if (process.env.REA_MCP_NODE && isFile(process.env.REA_MCP_NODE)) {
+            nodeExe = process.env.REA_MCP_NODE; nodeHow = 'env'; nodeVer = '?'; nodeOk = true; } else if
+            (isFile(prov)) { nodeExe = prov; nodeHow = 'provisioned'; try { nodeVer =
+            fs.readFileSync(path.join(home, 'node', 'version.txt'), 'utf8').trim().replace(/^v/, ''); nodeOk
+            = okNode(nodeVer); } catch { nodeVer = '?'; nodeOk = true; } } let V =
+            process.env.REA_MCP_VERSION || '6.9.0', fallback = ''; if (!process.env.REA_MCP_ENTRY &&
+            !process.env.REA_MCP_VERSION && needNew(V) && nodeOk === false && isFile(path.join(home,
+            'agents', '6.7.0', 'node_modules', 'rea-agents', 'scripts', 'rea.mjs'))) { fallback = V; V =
+            '6.7.0'; } const entry = process.env.REA_MCP_ENTRY || path.join(home, 'agents', V,
+            'node_modules', 'rea-agents', 'scripts', 'rea.mjs'); let cmd, args, how; if (isFile(entry)) {
+            cmd = nodeExe; args = [entry, 'mcp']; how = 'local-install'; } else if (win) { cmd =
+            process.env.ComSpec || 'cmd.exe'; args = ['/d', '/s', '/c', 'npx', '-y', 'rea-agents@' + V,
+            'mcp']; how = 'npx'; } else { cmd = 'npx'; args = ['-y', 'rea-agents@' + V, 'mcp']; how = 'npx';
+            } log('launch ' + how + ' ver=' + V + ' node=' + nodeHow + '(' + nodeVer + ') cmd=' + cmd + '
+            args=' + JSON.stringify(args) + (fallback ? ' fallback-from=' + fallback + '-node-too-old' :
+            '')); const SANITIZE = /\\u[dD][89a-fA-F][0-9a-fA-F]{2}/; const sanitizeTool = (tool) => { let n
+            = 0; const stack = [tool.inputSchema]; while (stack.length) { const node = stack.pop(); if
+            (!node || typeof node !== 'object') continue; if (Array.isArray(node)) { for (const v of node)
+            stack.push(v); continue; } for (const k of Object.keys(node)) { const v = node[k]; if (k ===
+            'pattern' && typeof v === 'string' && SANITIZE.test(v)) { delete node[k]; n++; } else if (v &&
+            typeof v === 'object') stack.push(v); } } return n; }; const sanitizeLine = (line) => { const t
+            = line.trim(); if (t.charAt(0) !== '{' || t.indexOf('"inputSchema"') < 0) return line; try {
+            const msg = JSON.parse(t); const tools = msg && msg.result && msg.result.tools; if
+            (!Array.isArray(tools)) return line; let n = 0; for (const tool of tools) { if (tool &&
+            tool.inputSchema && typeof tool.inputSchema === 'object') n += sanitizeTool(tool); } if (!n)
+            return line; log('tools/list sanitized ' + n + ' surrogate pattern(s) that DSH schema validation
+            rejects'); return JSON.stringify(msg); } catch { return line; } }; const child = spawn(cmd,
+            args, {stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: !win, env: env}); let
+            closed = false; const stop = () => { if (closed) return; closed = true; try { if (win) {
+            spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {stdio: 'ignore', windowsHide:
+            true}); } else { process.kill(-child.pid, 'SIGTERM'); setTimeout(() => { try {
+            process.kill(-child.pid, 'SIGKILL'); } catch {} }, 1200); } } catch {} };
+            process.stdin.pipe(child.stdin); process.stdin.on('error', () => {}); child.stdin.on('error', ()
+            => {}); child.stderr.pipe(process.stderr); const decoder = new StringDecoder('utf8'); let buf =
+            ''; child.stdout.on('data', (chunk) => { buf += decoder.write(chunk); let i; while ((i =
+            buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 1);
+            process.stdout.write(sanitizeLine(line) + '\n'); } }); child.stdout.on('end', () => { buf +=
+            decoder.end(); if (buf.length) { process.stdout.write(sanitizeLine(buf)); buf = ''; } }); for
+            (const s of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(s, stop); child.on('error', (e) => {
+            log('spawn error ' + (e.code || '') + ' ' + e.message); process.stderr.write('[dsh-rea] cannot
+            start the REA MCP server (' + how + '): ' + e.message + '\n'); process.exit(1); });
+            child.on('exit', (c, s) => { closed = true; log('server exit code=' + c + ' signal=' + s);
+            process.exit(c === null ? (s ? 1 : 0) : c); });
         env:
           ELECTRON_RUN_AS_NODE: '1'
           REA_MCP_INPUT_SCHEMA_PROFILE: compact

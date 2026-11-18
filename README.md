@@ -262,7 +262,14 @@ Harness 关闭时 Windows 用 `taskkill /T /F`、POSIX 用进程组 `SIGTERM`（
 
 完整的「每个版本做了什么、修了什么、怎么验证」见 **[CHANGELOG.md](CHANGELOG.md)**；摘要：
 
-- **v1.6.0**（当前）：跟上上游 **rea-agents 6.9.0**（工具 **207 → 255 个**，+48，无删除）——
+- **v1.6.1**（当前）：修 6.9.0 的 schema 兼容问题——上游有 15 个工具参数带
+  "禁止孤立 UTF-16 代理项"的 `pattern`（形如 `^[^\uD800-\uDFFF]*$`，写成反斜杠 u 转义），
+  DSH 在构造函数 schema 时拒绝该取值，`binary_session` 等 14 个工具一调就报
+  `Invalid schema for function ...: "..." is not a "regex"`。修法：启动器改成 **stdio 代理**，
+  只删这 15 个 `pattern`（101 → 86 个保留）、其余字节原样透传，并在 `launcher.log` 记
+  `tools/list sanitized 15 surrogate pattern(s) …`。实测同一启动器：255 工具、`pattern` 无转义值、
+  `binary_session` 在列。
+- **v1.6.0**：跟上上游 **rea-agents 6.9.0**（工具 **207 → 255 个**，+48，无删除）——
   但 6.9.0 要求 Node `^22.23.4 || ^24.22.1 || >=26.12.1`，而 Harness 自带 **24.21.0**，
   所以本版**自带一份 Node 24.22.3**（`~/.rea/dsh/node`，SHA-256 钉扎；setup 脚本第 1c / 8c 步），
   启动器优先用它；没有这份 Node 时**自动回退到 6.7.0**（207 工具）并在 `launcher.log` 记录
@@ -316,10 +323,11 @@ Harness 关闭时 Windows 用 `taskkill /T /F`、POSIX 用进程组 `SIGTERM`（
 - **v1.0.1**：单行 + Node 启动器；修复旧构建下第二条平台行显示「异常」的问题。
 - **v1.0.0**：双行 + `disabled: !!js`（在较旧 Harness 上可能出现 1 运行中 / 1 异常）。
 
-十一个标签可共存、互不冲突；任意版本都能按标签锁装：
+十二个标签可共存、互不冲突；任意版本都能按标签锁装：
 
 ```powershell
-dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.6.0   # 最新（REA 6.9.0，255 工具，自带 Node 24.22.3）
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.6.1   # 最新（REA 6.9.0 + schema 兼容修复）
+dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.6.0   # REA 6.9.0，255 工具，自带 Node 24.22.3
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.5.2   # 上游开关来源/作者标注
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.5.1   # 图形开关接线 + 文档
 dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.5.0   # REA 6.7.0，207 工具
@@ -382,6 +390,11 @@ DeepSeek Harness 的官方接入说明（`rea setup --client dsh` 写入的正�
 3. **首启超时 / 每次启动都慢十几秒**：跑 `setup-rea-tools.{ps1,sh}` 装本地层（离线 + 快），
    或在 `launcher.log` 里确认命中的是不是 `npx` 层。`failOnStartupError` 保持 `false`：
    激活会等首连且没有内部超时，设成 `true` 只会把冷启动抖动变成 Harness 启动失败。
+3b. **某个工具一调就报 `Invalid schema for function … is not a "regex"`**：这是 REA 6.9.0 的
+   `pattern` 取值（禁止孤立 UTF-16 代理项，写成反斜杠 u 转义）DSH 不认。v1.6.1 起启动器是
+   **stdio 代理**，会在 `tools/list` 响应里删掉这 15 个 `pattern`（其余 86 个保留），
+   `launcher.log` 会有一行 `tools/list sanitized 15 surrogate pattern(s) …`；看到这行即为正常。
+   老版本（v1.6.0）遇到该报错请升级到 v1.6.1。
 4. **原生分析报 provider 缺失**：静态 JS/.NET 不需要引擎；原生需 Hopper/Ghidra/IDA，
    用 `npx -y rea-agents@6.9.0 doctor --json` 诊断（`rea doctor` 同理）。
 5. **token 消耗过高**：确认 `env.REA_MCP_INPUT_SCHEMA_PROFILE: compact` 在配置里；

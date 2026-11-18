@@ -641,3 +641,23 @@ Playwright trace、Windows shortcut、bundle resources 等）。**没有任何�
 - 启动器新增 **Node 选择与自动回退**（见 8.2），日志行会带 `ver=… node=provisioned(24.22.3)`
   或 `fallback-from=6.9.0-node-too-old`；
 - 前 7 节关于 `dsh-mcp-client` / `dsh-app-boot` 的结论**不受影响**（那是 DSH 侧，与 REA 版本无关）。
+
+### 8.5 DSH 的函数 schema 校验 vs REA 6.9.0 的 `pattern`（v1.6.1）
+
+6.9.0 有 15 个工具参数的 schema 带 `pattern`：`^[^\uD800-\uDFFF]*$`（JSON 里写作反斜杠 u 转义，
+含义"字符串不得含孤立 UTF-16 代理项"）。DSH 在构造函数 schema 时拒绝该取值：
+
+```
+Invalid schema for function 'mcp__rea__binary_session':
+"^[^\uD800-\uDFFF]*$" is not a "regex"
+```
+
+对照数据：6.7.0 有 162 个 `pattern` 字段、**0** 个带转义，所以从没复现；6.9.0 共 101 个，
+其中 15 个带转义（14 个工具：`binary_session`、`close_binary`、`reset_investigation`、
+`extract_artifact`、`inspect_plist`、`inspect_with_objdump`、`inspect_keyed_archive`、
+`inspect_managed_artifact`、`inspect_managed_members`、`inspect_managed_native_boundaries`、
+`start_gdb_session`、`start_frida_session`、`load_frida_script`、`instrument_with_frida`）。
+
+处理方式（v1.6.1 起）：启动器变成 **stdio 代理**，只在 `tools/list` 响应里删除这 15 个 `pattern`
+（101 → 86 保留），其余字节原样透传，并把删除数写进 `launcher.log`。这是**客户端侧的兼容修补**，
+不改 REA 二进制、不改 DSH 代码；上游若改用 DSH 能接受的写法，代理自动不再改动。

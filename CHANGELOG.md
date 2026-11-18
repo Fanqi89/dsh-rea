@@ -9,6 +9,65 @@ dsh plugin --profile "$env:DSH_PROFILE" add github:Fanqi89/dsh-rea#v1.1.0
 
 ---
 
+## v1.6.1 — 2026-11-19
+
+**主题：修 6.9.0 的工具 schema 被 DSH 拒绝的问题 —— 启动器改成 stdio 代理，只剥掉 DSH 不认的
+`pattern` 字段（15 个），其余字节原样透传。**
+
+### 现象（v1.6.0 实机）
+
+v1.6.0 把 REA 提到 6.9.0 后，`tools/list` 里有 255 个工具、握手正常，但**调用带路径参数的工具**时报：
+
+```
+Invalid schema for function 'mcp__rea__binary_session':
+"^[^\uD800-\uDFFF]*$" is not a "regex"
+```
+
+### 根因（用数据定位）
+
+| rea-agents | `pattern` 字段总数 | 含 surrogate 转义（`\uD800`…） |
+|---|---|---|
+| 6.7.0（能正常调） | 162 | **0** |
+| 6.9.0 | 101 | **15**（14 个工具、1 个唯一取值） |
+
+6.9.0 给 `path`/`program`/`save_path` 这类字符串加了"不许孤立代理项"的约束，
+值形如 `^[^\uD800-\uDFFF]*$`（写的是反斜杠 u 转义）。DSH 在构造函数 schema 时拒绝该取值，
+于是这些工具一调就失败：`binary_session`、`close_binary`、`reset_investigation`、`extract_artifact`、
+`inspect_plist`、`inspect_with_objdump`、`inspect_keyed_archive`、`inspect_managed_artifact`、
+`inspect_managed_members`、`inspect_managed_native_boundaries`、`start_gdb_session`、
+`start_frida_session`、`load_frida_script`、`instrument_with_frida`。
+
+### 修复
+
+启动器**不再是裸 spawn，而是 stdio 代理**（`args: ['-e', …]` 里的 5,260 B 脚本）：
+
+- `stdin` → 子进程、子进程 `stderr` → 我们的 `stderr`，原样转发；
+- 子进程 `stdout` 按行解析，**只**在 `tools/list` 响应里删掉那 15 个 `pattern` 键
+  （101 → 86 个 pattern 保留），其余字节与 JSON-RPC 顺序完全不变；
+- 每删一次在 `launcher.log` 记一行：
+  `tools/list sanitized 15 surrogate pattern(s) that DSH schema validation rejects`；
+- 用 `StringDecoder` 处理分块（4.6 MB 的 tools/list 也可能被切块），保证 UTF-8 不被拆坏。
+
+代价：多一次进程内 JSON 解析/序列化（实测 initialize 2.3 s、tools/list 正常返回 255 个工具），
+没有额外进程，npx 兜底路径同样经过代理。
+
+### 验证
+
+- **真实启动器**（`node -e "<launcher>"`，与 `dsh-mcp-client` 完全同路径）：6.9.0、255 工具、
+  `instructions` 2,604 B、`pattern` 101 → **86**、含 surrogate 的 **0**、`binary_session` 在列。
+- **Electron as Node 24.21.0**（桌面真实运行时）跑同一启动器：同样 255 工具，日志出现 sanitize 行。
+- 启动器日志三行实证：`launch local-install ver=6.9.0 node=provisioned(24.22.3)` →
+  `tools/list sanitized 15 …` → `server exit code=0`。
+- 补丁：`cordis.patch.yml` 14,247 B，折叠往返 **5,260 B** 逐字节一致；两条 entry schema 校验 OK。
+
+### 说明
+
+- 被删掉的 `pattern` 只约束"字符串里不得出现孤立 UTF-16 代理项"，模型正常不可能生成，
+  删掉不影响任何合法调用；6.7.0/6.9.0 其余 86 个 `pattern` 全部保留。
+- 若上游以后把该约束改成 DSH 能接受的写法，代理会自动不再改动（删除数为 0）。
+
+---
+
 ## v1.6.0 — 2026-11-18
 
 **主题：跟上上游 **rea-agents 6.9.0**（工具 **207 → 255**，+48，无删除）——
